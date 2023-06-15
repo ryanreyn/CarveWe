@@ -18,6 +18,14 @@ file_headers<-read.csv("Data/all_max_flux_headers_diamond.csv")
 metabolite_matrix<-as.matrix(metabolite_info[,-1])
 dimnames(metabolite_matrix)<-list(as.matrix(file_headers[,2]),as.matrix(metabolite_dictionary[,2]))
 
+#Read in information of the reaction frequency for the genomes to subset a "high quality" set of genomes
+rxn_freq_info<-read.csv("Data/rxn_info.csv")
+thresh<-0.5
+
+high.quality.genomes<-rxn_freq_info%>%filter(mean_freq>thresh)%>%select(X)%>%as.matrix()
+subset_rows<-which(rownames(metabolite_matrix)%in%high.quality.genomes)
+metabolite_matrix<-metabolite_matrix[subset_rows,]
+
 #Need to remove any columns with no flux in any models
 zerofluxes<-which(colSums(metabolite_matrix)==0)
 if (is_empty(zerofluxes)==FALSE){
@@ -28,13 +36,8 @@ if (is_empty(zerofluxes)==FALSE){
 scaled_matrix<-scale(metabolite_matrix)
 
 #We would like to remove certain metabolites we don't think are super interesting and have been shown to drive SOM patterns
-remove_metab<-which(metabolite_dictionary[,2] %in% c("Manganese","Zinc","Co2+","Calcium","Chloride","Potassium","Copper","Magnesium"))
+remove_metab<-which(colnames(scaled_matrix) %in% c("Manganese","Zinc","Co2+","Calcium","Chloride","Potassium","Copper","Magnesium"))
 scaled_matrix<-scaled_matrix[,-remove_metab]
-
-#Temporary code to try subsetting by a small amount of high quality genomes to test the effect on clustering
-# subset_genomes<-read.csv("80ptConsistentModels.csv")
-# subset_loc<-which(rownames(scaled_matrix) %in% subset_genomes)
-# sub_mat<-scaled_matrix[subset_loc,]
 
 #Run SOMs, for the full scaled dataset we have selected a 9x8 grid but other grids are being tested
 gridrows=10; gridcols=10; gridsize=gridrows*gridcols
@@ -43,7 +46,7 @@ carve.som<-trainSOM(x.data=scaled_matrix)
 
 #Analyze SOMs
 #Use superClass with a chosen k value (manually selected) and then index it to get the clusters for each genome
-num_clusters=8
+num_clusters=6
 carve.sc<-superClass(carve.som,k=num_clusters)
 
 clusters<-carve.sc$cluster
@@ -51,12 +54,12 @@ ids<-carve.sc$som$clustering
 sample_clusters<-clusters[ids]
 
 #We also want to examine the recipes to find genomes where all or nearly all recipes are identical
-genome_IDs<-unique(file_headers$model_name)
+genome_IDs<-unique(rownames(scaled_matrix))
 dupe_count<-0
 dupe_IDs<-c()
 for (i in 1:length(genome_IDs)){
   curr_id<-genome_IDs[i]
-  curr_indices<-which(file_headers$model_name %in% curr_id)
+  curr_indices<-which(rownames(scaled_matrix) %in% curr_id)
   sub_mat<-scaled_matrix[curr_indices,]
   dupe_check<-unique(sub_mat)
   if (dim(dupe_check)[1]==1){
@@ -105,10 +108,10 @@ ggplot(threshold_df,aes(x=mean,y=std,colour=clusters))+geom_point()+theme_bw()
 
 #First we want to look at the average coefficients of variance per metabolite per genome (one value per genome)
 #Use the genome IDs to subset all models for a genome
-genome_IDs<-unique(file_headers$model_name)
+genome_IDs<-unique(rownames(metabolite_matrix))
 average_coeffsvar<-vector(mode="integer",length=length(genome_IDs))
 for (i in 1:length(genome_IDs)){
-  curr_rows<-which(file_headers$model_name==genome_IDs[i])
+  curr_rows<-which(rownames(metabolite_matrix)==genome_IDs[i])
   curr_matrix<-metabolite_matrix[curr_rows,]
   #Need to remove metabolites that aren't present in any recipes
   zerocols<-which(colSums(curr_matrix)==0)
@@ -129,13 +132,26 @@ coeffs_df<-as_tibble(average_coeffsvar)
 ggplot(coeffs_df,aes(x=value))+geom_histogram(color="blue",fill="white")+labs(x="Average Coefficient of Variance",y="Number of Genomes")+theme_bw()
 
 #We want to look at the evenness of model distribution across the clusters to look for genomes to remove
-
+ids<-carve.sc$som$clustering
+sample_clusters<-clusters[ids]
+counts_table<-vector(mode="integer",length=60)
+for (i in 1:length(genome_IDs)){
+  curr_rows<-which(rownames(scaled_matrix)==genome_IDs[i])
+  curr_distr<-sample_clusters[curr_rows]%>%table()%>%unique()
+  counts_table[curr_distr]<-counts_table[curr_distr]+1
+}
+evenness_df<-as_tibble(counts_table)
+ggplot(evenness_df,aes(x=c(1:60),y=value))+
+  geom_point()+
+  labs(x="Number of replicates in cluster",y="Number of Genomes")+
+  theme_bw()
 
 #We also want to identify for different levels of K how much genome replicates are being split into multiple nodes
 sizes<-c(2:20)
-genome_IDs<-unique(file_headers$model_name)
+# genome_IDs<-unique(file_headers$model_name)
 consensus<-matrix(data=0,nrow=length(sizes),ncol=1)
 breadth<-matrix(data=0,nrow=length(sizes),ncol=1)
+evenness<-matrix(data=0,nrow=length(sizes),ncol=1)
 for (i in 1:length(sizes)){
   curr_size=sizes[i]
   curr.sc<-superClass(carve.som,k=curr_size)
@@ -145,21 +161,30 @@ for (i in 1:length(sizes)){
   
   tmp.cons<-matrix(data=0,nrow=length(genome_IDs),ncol=1)
   tmp.breadth<-matrix(data=0,nrow=length(genome_IDs),ncol=1)
+  tmp.evenness<-matrix(data=0,nrow=length(genome_IDs),ncol=1)
   for (j in 1:length(genome_IDs)){
     curr_genome<-genome_IDs[j]
     #curr.cons<-(which(file_headers$model_name %in% curr_genome)%>%sample_clusters[.]%>%table()%>%max())/60
     #curr.breadth<-(which(file_headers$model_name %in% curr_genome)%>%sample_clusters[.]%>%unique()%>%length())/60
-    curr.cons<-(which(rownames(scaled_matrix) %in% curr_genome)%>%sample_clusters[.]%>%table()%>%max())/60
-    curr.breadth<-(which(rownames(scaled_matrix) %in% curr_genome)%>%sample_clusters[.]%>%unique()%>%length())/60
+    curr_cluster<-which(rownames(scaled_matrix) %in% curr_genome)%>%sample_clusters[.]
+    curr.cons<-(curr_cluster%>%table()%>%max())/60
+    curr.breadth<-(curr_cluster%>%unique()%>%length())/60
+    if (length(table(curr_cluster))==1){
+      curr.evenness<-0
+    } else {
+      curr.evenness<-(max(table(curr_cluster))-min(table(curr_cluster)))/60
+    }
     
     tmp.cons[j]<-curr.cons
     tmp.breadth[j]<-curr.breadth
+    tmp.evenness[j]<-curr.evenness
   }
-  consensus[i]<-median(tmp.cons)
-  breadth[i]<-median(tmp.breadth)
+  consensus[i]<-mean(tmp.cons)
+  breadth[i]<-mean(tmp.breadth)
+  evenness[i]<-mean(tmp.evenness)
 }
-consensus_df<-cbind(sizes,consensus,breadth)%>%as.data.frame()
-colnames(consensus_df)<-c("Cluster Size","Consensus","Breadth")
+consensus_df<-cbind(sizes,consensus,breadth,evenness)%>%as.data.frame()
+colnames(consensus_df)<-c("Cluster Size","Consensus","Breadth","Evenness")
 consensus_df<-consensus_df%>%pivot_longer(-c(`Cluster Size`),names_to="Metric",values_to="Value")
 
 ggplot(consensus_df,aes(x=`Cluster Size`,y=Value,color=Metric))+geom_line()+ylim(0,1)+theme_bw()

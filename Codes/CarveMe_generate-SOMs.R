@@ -170,7 +170,7 @@ for (i in 1:length(sizes)){
     curr.cons<-(curr_cluster%>%table()%>%max())/60
     curr.breadth<-(curr_cluster%>%unique()%>%length())/60
     if (length(table(curr_cluster))==1){
-      curr.evenness<-0
+      curr.evenness<-1
     } else {
       curr.evenness<-(max(table(curr_cluster))-min(table(curr_cluster)))/60
     }

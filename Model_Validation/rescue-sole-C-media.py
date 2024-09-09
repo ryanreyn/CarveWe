@@ -84,11 +84,11 @@ len(rxn_df[(rxn_df.mean_freq >= 0.9) & (rxn_df.mean_freq <= 0.96)])
 
 #load in all the dependancy files
 #load matti vitamins
-vitamins = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_vitamins.csv', index_col = 0)
+vitamins = pd.read_csv('/home1/acweiss/CarveWe/Data/matti_vitamins.csv', index_col = 0)
 #load the reaction information dataframe
-rxn_freqs = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_rxn_info.csv', index_col = 0)
+rxn_freqs = pd.read_csv('/home1/acweiss/CarveWe/Data/matti_rxn_info.csv', index_col = 0)
 #load in the lab IDs file
-lab_mets = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_lab_metabolite_ids.csv', index_col = 0)
+lab_mets = pd.read_csv('/home1/acweiss/CarveWe/Data/matti_lab_metabolite_ids.csv', index_col = 0)
 
 
 

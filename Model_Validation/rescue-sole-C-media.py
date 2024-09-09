@@ -1,8 +1,7 @@
 from cobra.io import read_sbml_model
 from cobra.flux_analysis import pfba
 from cobra.medium import minimal_medium
-import pandas as pd
-import matplotlib.patches as pat
+
 
 import colorcet as cc
 import numpy as np
@@ -24,19 +23,7 @@ from pandas.io.parsers.python_parser import count_empty_vals
 
 import ast
 
-#for jaccard calculation
-from itertools import combinations
-from sklearn.metrics import jaccard_score
-
-import statsmodels.api as sm
-from bioinfokit.analys import stat
-#stats import
-from numpy.random import seed
-from numpy.random import randn
-from numpy.random import normal
-from scipy.stats import ttest_ind
-
-import scipy.stats as stats
+import re
 
 #Try to suppress the cobra.medium log messages that are bloating the output
 import logging
@@ -45,6 +32,9 @@ cobra_logger.setLevel(logging.CRITICAL)
 
 #Output a print statement
 print("Successfully loaded packages!")
+
+#name of this run/run type:
+run_name = "low_vit_test"
 
 #step 1
 #generate a list with all the genome names and one with all the ensemble sizes
@@ -92,29 +82,15 @@ rxn_df = pd.DataFrame.from_dict(rxn_info, orient = "index")
 
 len(rxn_df[(rxn_df.mean_freq >= 0.9) & (rxn_df.mean_freq <= 0.96)])
 
-#store individual reaction info in a dataframe:
-rxn_freqs = {}
-
-for genome in genomes:
-  rxn_states = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti-data_ensemble_rxn-info_files/%s_rxn-info.csv' %genome, header = None, index_col=0)
-  freqs = rxn_states.mean(axis='columns') #calculates the mean reaction frequency
-  rxn_freqs[genome] = freqs.to_dict()
-
-freqs_df = pd.DataFrame.from_dict(rxn_freqs)
-
-#plot histogram of reaction frequencies
-fig, ax = plt.subplots()
-ax.set_xlabel('Average Reaction Frequency', fontsize=14)
-ax.set_ylabel('Occurances', fontsize=12)
-ax.set_title('Histogram of average reaction frequencies', fontsize=14)
-
-ax.hist(rxn_df['mean_freq'], bins = 20)
-
+#load in all the dependancy files
 #load matti vitamins
 vitamins = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_vitamins.csv', index_col = 0)
-
-#save the reaction information dataframe
+#load the reaction information dataframe
 rxn_freqs = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_rxn_info.csv', index_col = 0)
+#load in the lab IDs file
+lab_mets = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_lab_metabolite_ids.csv', index_col = 0)
+
+
 
 #set high quality genomes
 hq_genomes = []
@@ -129,13 +105,6 @@ len(hq_genomes)
 
 #Set all the carbon containing reactions to 0 and turn on all the other reactions
 
-import re
-
-#load in the lab IDs file
-lab_mets = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_lab_metabolite_ids.csv', index_col = 0)
-
-#load matti vitamins
-vitamins = pd.read_csv('/project/nmherrer_110/acweiss/ensemble_media/matti_vitamins.csv', index_col = 0)
 
 #set path locations:
 xml_path = '/project/nmherrer_110/acweiss/ensemble_media/matti-data_xml-files'
@@ -260,20 +229,23 @@ metabolite_dict = {}
 for genome in hq_genomes:
   curr_frame = pd.DataFrame.from_dict(growth_info[genome],orient="index").T
   sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins']) - curr_frame.loc['only_vitamins'].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
-  print(len(sub_vitamins))
+  #print(len(sub_vitamins))
 
   #Determine whether the models could grow sufficiently (for now we will say a growth rate of >1) with vitamin rescue
-  check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].any(axis=1)].tolist()
+  check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].any(axis=1)>= (sub_vitamins.shape[1] / 2)].tolist()
   new_row = [len(check_growth),len(check_growth)/len(sub_vitamins)]
   metabolite_recovery.append(new_row)
   metabolite_dict[genome] = check_growth
-  print(check_growth)
+  #print(check_growth)
 
-print("This is the metabolite_recovery data object")
-print(metabolite_recovery)
+#print("This is the metabolite_recovery data object")
+#print(metabolite_recovery)
 metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Num_Metabolites','Perc_Metabolites'],index = hq_genomes)
-print(metab_recovery_df)
-print(metabolite_dict)
+#print(metab_recovery_df)
+#print(metabolite_dict)
 recovered_growth_genomes = [y for y in metabolite_recovery if y[0] > 1]
-print(recovered_growth_genomes)
-print(len([y for y in metabolite_recovery if y[0] > 0]))
+#print(recovered_growth_genomes)
+#print(len([y for y in metabolite_recovery if y[0] > 0]))
+
+#save the output for number and percentage of genomes containing something:
+metab_recovery_df.to_csv("/home1/acweiss/CarveWe/Output/%{s}_recovery.csv" %(run_name))

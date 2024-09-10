@@ -1,3 +1,4 @@
+import cobra
 from cobra.io import read_sbml_model
 from cobra.flux_analysis import pfba
 from cobra.medium import minimal_medium

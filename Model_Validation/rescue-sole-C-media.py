@@ -232,7 +232,7 @@ for genome in hq_genomes:
   #print(len(sub_vitamins))
 
   #Determine whether the models could grow sufficiently (for now we will say a growth rate of >1) with vitamin rescue
-  check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].any(axis=1)>= (sub_vitamins.shape[1] / 2)].tolist()
+  check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].sum(axis=1)>= (sub_vitamins.shape[1] / 2)].tolist()
   new_row = [len(check_growth),len(check_growth)/len(sub_vitamins)]
   metabolite_recovery.append(new_row)
   metabolite_dict[genome] = check_growth
@@ -248,4 +248,4 @@ recovered_growth_genomes = [y for y in metabolite_recovery if y[0] > 1]
 #print(len([y for y in metabolite_recovery if y[0] > 0]))
 
 #save the output for number and percentage of genomes containing something:
-metab_recovery_df.to_csv("/home1/acweiss/CarveWe/Output/%{s}_recovery.csv" %(run_name))
+metab_recovery_df.to_csv("../Output/%s_recovery.csv" %(run_name))

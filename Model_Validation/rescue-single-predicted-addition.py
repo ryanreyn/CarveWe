@@ -167,7 +167,7 @@ def find_media_rxns(genome, model, data_path):
 #initialize dictionary
 growth_info = {} #initialize dictionary
 
-for genome in hq_genomes:
+for genome in hq_genomes[0:1]:
     #import model and reaction states
   model = read_sbml_model('%s/%s.xml'%(xml_path, genome))
   rxn_states = pd.read_csv('%s/%s_rxn-info.csv' %(rxn_path, genome), header = None, index_col=0)
@@ -276,7 +276,7 @@ for genome in hq_genomes:
   metabolite_dict[genome] = {}
   for predrxn in growth_info[genome].keys():
     curr_frame = pd.DataFrame.from_dict(growth_info[genome][predrxn],orient="index").T
-    sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no matti"]) - curr_frame.loc['no matti'].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
+    sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no_matti"]) - curr_frame.loc['no_matti'].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
     #print(len(sub_vitamins))
 
     #Determine whether the models could grow sufficiently (for now we will say a growth rate of >1) with vitamin rescue

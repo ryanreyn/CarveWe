@@ -139,7 +139,7 @@ def contains_carbon(metabolite):
 #ie the carbon compounds not accounted for in vitamins or mattis compounds
 def find_media_rxns(genome, model, data_path):
   #import model and reaction states
-  media = pd.read_csv('%s/matti_media/%s_ensemble_media.csv'%(data_path, genome), index_col = 0)
+  media = pd.read_csv('%s/%s_ensemble_media.csv'%(data_path, genome), index_col = 0)
 
   #first we need to filter for the metabolites that are are in the max_flux recipes only
   media = media.filter(like="max_flux").dropna(how="all")

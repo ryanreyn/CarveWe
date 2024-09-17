@@ -9,14 +9,14 @@ import numpy as np
 import pandas as pd
 
 
-import matplotlib.patches as pat
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib import colors
+#import matplotlib.patches as pat
+#import matplotlib as mpl
+#import matplotlib.pyplot as plt
+#from matplotlib import colors
 
 
-from matplotlib import cm
-from PIL import Image, ImageDraw
+#from matplotlib import cm
+#from PIL import Image, ImageDraw
 import os
 import fnmatch
 from pandas.io.parsers.python_parser import count_empty_vals
@@ -276,7 +276,7 @@ for genome in hq_genomes:
   metabolite_dict[genome] = {}
   for predrxn in growth_info[genome].keys():
     curr_frame = pd.DataFrame.from_dict(growth_info[genome][predrxn],orient="index").T
-    sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no matti"]) - curr_frame.loc['no matti'].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
+    sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no_matti"]) - curr_frame.loc['no_matti'].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
     #print(len(sub_vitamins))
 
     #Determine whether the models could grow sufficiently (for now we will say a growth rate of >1) with vitamin rescue
@@ -284,7 +284,7 @@ for genome in hq_genomes:
     #check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].any(axis=1)].tolist()
     new_row = [predrxn, genome, len(check_growth),len(check_growth)/len(sub_vitamins)]
     metabolite_recovery.append(new_row)
-    metabolite_dict[predrxn] = check_growth
+    metabolite_dict[genome][predrxn] = check_growth
     #print(check_growth)
 
 #metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Predicted_Metabolite', 'Genome','Num_Metabolites','Perc_Metabolites'],index = growth_info[genome].keys())
@@ -292,8 +292,10 @@ metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Predicted_Meta
 #print(metab_recovery_df)
 #print(metabolite_dict)
 recovered_growth_genomes = [y for y in metab_recovery_df['Num_Metabolites'] if y > 1]
+recovered_metabolites = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in metabolite_dict.items()]))
 #print(recovered_growth_genomes)
 #print(len([y for y in metab_recovery_df['Num_Metabolites'] if y > 0]))
 
 #save the output for number and percentage of genomes containing something:
 metab_recovery_df.to_csv("../Output/%s_recovery.csv" %(run_name))
+recovered_metabolites.to_csv("../Output/%s_rescued_metabolites.csv" %(run_name))

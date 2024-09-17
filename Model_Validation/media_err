@@ -4,3 +4,5 @@ but cannot be loaded as requested: "python"
 
 
 
+rescue-sole-C-media.py:248: DeprecationWarning: The default dtype for empty Series will be 'object' instead of 'float64' in a future version. Specify a dtype explicitly to silence this warning.
+  recovered_metabolites = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in metabolite_dict.items()]))

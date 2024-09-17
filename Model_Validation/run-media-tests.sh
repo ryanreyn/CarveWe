@@ -5,4 +5,4 @@ eval "$(conda shell.bash hook)"
 conda activate /project/nmherrer_110/tools/.conda/envs/CarveMe
 
 module load python
-python rescue-single-predicted-addition.py
+python rescue-sole-C-media.py

@@ -4,20 +4,20 @@ from cobra.flux_analysis import pfba
 from cobra.medium import minimal_medium
 
 
-import colorcet as cc
+#import colorcet as cc
 import numpy as np
 import pandas as pd
 from scipy import stats
 
 
-import matplotlib.patches as pat
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib import colors
+#import matplotlib.patches as pat
+#import matplotlib as mpl
+#import matplotlib.pyplot as plt
+#from matplotlib import colors
 
-import seaborn as sns
-from matplotlib import cm
-from PIL import Image, ImageDraw
+#import seaborn as sns
+#from matplotlib import cm
+#from PIL import Image, ImageDraw
 import os
 import fnmatch
 from pandas.io.parsers.python_parser import count_empty_vals

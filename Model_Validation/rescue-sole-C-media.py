@@ -245,12 +245,10 @@ metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Num_Metabolite
 #print(metab_recovery_df)
 #print(metabolite_dict)
 recovered_growth_genomes = [y for y in metabolite_recovery if y[0] > 1]
+recovered_metabolites = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in metabolite_dict.items()]))
 #print(recovered_growth_genomes)
 #print(len([y for y in metabolite_recovery if y[0] > 0]))
 
 #save the output for number and percentage of genomes containing something:
-<<<<<<< HEAD
-metab_recovery_df.to_csv("/home1/acweiss/CarveWe/Output/%{s}_recovery.csv" %(run_name))
-=======
 metab_recovery_df.to_csv("../Output/%s_recovery.csv" %(run_name))
->>>>>>> dbc974b3812384b101031eacfe6b26132f28a036
+recovered_metabolites.to_csv("../Output/%s_rescued_metabolites.csv" %(run_name))

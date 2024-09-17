@@ -167,7 +167,7 @@ def find_media_rxns(genome, model, data_path):
 #initialize dictionary
 growth_info = {} #initialize dictionary
 
-for genome in hq_genomes[0:1]:
+for genome in hq_genomes:
     #import model and reaction states
   model = read_sbml_model('%s/%s.xml'%(xml_path, genome))
   rxn_states = pd.read_csv('%s/%s_rxn-info.csv' %(rxn_path, genome), header = None, index_col=0)
@@ -272,7 +272,7 @@ metabolite_recovery = []
 metabolite_dict = {}
 
 #We will re-expand the dictionary for each genome
-for genome in hq_genomes[0:1]:
+for genome in hq_genomes:
   metabolite_dict[genome] = {}
   for predrxn in growth_info[genome].keys():
     curr_frame = pd.DataFrame.from_dict(growth_info[genome][predrxn],orient="index").T
@@ -284,7 +284,7 @@ for genome in hq_genomes[0:1]:
     #check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].any(axis=1)].tolist()
     new_row = [predrxn, genome, len(check_growth),len(check_growth)/len(sub_vitamins)]
     metabolite_recovery.append(new_row)
-    metabolite_dict[predrxn] = check_growth
+    metabolite_dict[genome][predrxn] = check_growth
     #print(check_growth)
 
 #metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Predicted_Metabolite', 'Genome','Num_Metabolites','Perc_Metabolites'],index = growth_info[genome].keys())
@@ -292,8 +292,10 @@ metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Predicted_Meta
 #print(metab_recovery_df)
 #print(metabolite_dict)
 recovered_growth_genomes = [y for y in metab_recovery_df['Num_Metabolites'] if y > 1]
+recovered_metabolites = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in metabolite_dict.items()]))
 #print(recovered_growth_genomes)
 #print(len([y for y in metab_recovery_df['Num_Metabolites'] if y > 0]))
 
 #save the output for number and percentage of genomes containing something:
 metab_recovery_df.to_csv("../Output/%s_recovery.csv" %(run_name))
+recovered_metabolites.to_csv("../Output/%s_rescued_metabolites.csv" %(run_name))

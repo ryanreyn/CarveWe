@@ -1,0 +1,6 @@
+==========================================
+SLURM_JOB_ID = 23677775
+SLURM_JOB_NODELIST = b14-15
+TMPDIR = /tmp/SLURM_23677775
+==========================================
+Successfully loaded packages!

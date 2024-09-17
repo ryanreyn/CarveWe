@@ -9,14 +9,14 @@ import numpy as np
 import pandas as pd
 
 
-import matplotlib.patches as pat
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-from matplotlib import colors
+#import matplotlib.patches as pat
+#import matplotlib as mpl
+#import matplotlib.pyplot as plt
+#from matplotlib import colors
 
 
-from matplotlib import cm
-from PIL import Image, ImageDraw
+#from matplotlib import cm
+#from PIL import Image, ImageDraw
 import os
 import fnmatch
 from pandas.io.parsers.python_parser import count_empty_vals
@@ -139,7 +139,7 @@ def contains_carbon(metabolite):
 #ie the carbon compounds not accounted for in vitamins or mattis compounds
 def find_media_rxns(genome, model, data_path):
   #import model and reaction states
-  media = pd.read_csv('%s/matti_media/%s_ensemble_media.csv'%(data_path, genome), index_col = 0)
+  media = pd.read_csv('%s/%s_ensemble_media.csv'%(data_path, genome), index_col = 0)
 
   #first we need to filter for the metabolites that are are in the max_flux recipes only
   media = media.filter(like="max_flux").dropna(how="all")
@@ -272,7 +272,7 @@ metabolite_recovery = []
 metabolite_dict = {}
 
 #We will re-expand the dictionary for each genome
-for genome in hq_genomes:
+for genome in hq_genomes[0:1]:
   metabolite_dict[genome] = {}
   for predrxn in growth_info[genome].keys():
     curr_frame = pd.DataFrame.from_dict(growth_info[genome][predrxn],orient="index").T

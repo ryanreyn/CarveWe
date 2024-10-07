@@ -80,7 +80,7 @@ for genome in genomes:
 #create a dataframe from the dictionary
 rxn_df = pd.DataFrame.from_dict(rxn_info, orient = "index")
 
-len(rxn_df[(rxn_df.mean_freq >= 0.9) & (rxn_df.mean_freq <= 0.96)])
+len(rxn_df[(rxn_df.mean_freq >= 0.8)])
 
 #load in all the dependancy files
 #load matti vitamins
@@ -97,9 +97,10 @@ hq_genomes = []
 
 #loop through all the genomes
 for genome in genomes:
-  if rxn_freqs.loc[genome, 'mean_freq'] >= .9:
-    if rxn_freqs.loc[genome, 'mean_freq'] <= .96:
-      hq_genomes.append(genome)
+  if rxn_freqs.loc[genome, 'mean_freq'] >= .8:
+    #if rxn_freqs.loc[genome, 'mean_freq'] <= .96:
+    #  hq_genomes.append(genome)
+    hq_genomes.append(genome)
 
 len(hq_genomes)
 

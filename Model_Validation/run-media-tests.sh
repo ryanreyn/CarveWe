@@ -5,4 +5,4 @@ module purge
 eval "$(conda shell.bash hook)"
 conda activate /project/nmherrer_110/tools/.conda/envs/CarveMe
 
-python rescue-single-predicted-addition.py
+python rescue-sole-C-media.py

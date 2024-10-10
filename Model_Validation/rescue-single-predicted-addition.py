@@ -8,6 +8,7 @@ from cobra.medium import minimal_medium
 import numpy as np
 import pandas as pd
 
+import json
 
 #import matplotlib.patches as pat
 #import matplotlib as mpl
@@ -300,3 +301,8 @@ recovered_metabolites = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in metabol
 #save the output for number and percentage of genomes containing something:
 metab_recovery_df.to_csv("../Output/%s_recovery.csv" %(run_name))
 recovered_metabolites.to_csv("../Output/%s_rescued_metabolites.csv" %(run_name))
+
+#save whole growth_info dictionary as a json
+filepath = '../Output/%s_dict.json' %run_name
+with open(filepath, 'w') as f:
+    json.dump(growth_info, f)

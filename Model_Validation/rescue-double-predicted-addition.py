@@ -8,6 +8,7 @@ from cobra.medium import minimal_medium
 import numpy as np
 import pandas as pd
 
+import json
 
 #import matplotlib.patches as pat
 #import matplotlib as mpl
@@ -238,12 +239,6 @@ for genome in hq_genomes:
         solution = model.slim_optimize()
         growth_info[genome][predrxn][count]['only_vitamins'] = solution
 
-        #turn on the metabolite one by one and then add all single C sources:
-        model.reactions.get_by_id(predrxn).lower_bound = -1000
-        #optimize with only that compound as a baseline
-        solution = model.slim_optimize()
-        growth_info[genome][predrxn][count]['no_matti']= solution
-
         #turn on the first rescue metabolite if there was one, if not save agreement value
         if rescue_comp == 'agreement':
           growth_info[genome][predrxn][count]['first_rescue'] = solution
@@ -251,6 +246,12 @@ for genome in hq_genomes:
           model.reactions.get_by_id(rescue_comp).lower_bound = -1000
           solution = model.slim_optimize()
           growth_info[genome][predrxn][count]['first_rescue']= solution
+
+        #turn on the metabolite one by one and then add all single C sources:
+        model.reactions.get_by_id(predrxn).lower_bound = -1000
+        #optimize with only that compound as a baseline
+        solution = model.slim_optimize()
+        growth_info[genome][predrxn][count]['no_matti']= solution
 
         #loop through all the lab metabolites and add back a single C source:
         for exrxn in lab_mets['Exchange_rxn']:
@@ -284,7 +285,7 @@ for genome in hq_genomes:
   metabolite_dict[genome] = {}
   for predrxn in growth_info[genome].keys():
     curr_frame = pd.DataFrame.from_dict(growth_info[genome][predrxn],orient="index").T
-    sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no_matti", "first_rescue"]) - curr_frame.loc["first_rescue"].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
+    sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no_matti", "first_rescue"]) - curr_frame.loc["no_matti"].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
     #print(len(sub_vitamins))
 
     #Determine whether the models could grow sufficiently (for now we will say a growth rate of >1) with vitamin rescue
@@ -307,3 +308,8 @@ recovered_metabolites = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in metabol
 #save the output for number and percentage of genomes containing something:
 metab_recovery_df.to_csv("../Output/%s_recovery.csv" %(run_name))
 recovered_metabolites.to_csv("../Output/%s_rescued_metabolites.csv" %(run_name))
+
+#save whole growth_info dictionary as a json
+filepath = '../Output/%s_dict.json' %run_name
+with open(filepath, 'w') as f:
+    json.dump(growth_info, f)

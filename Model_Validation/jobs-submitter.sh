@@ -3,8 +3,8 @@
 # # # THIS SUBMITTER FILE WILL READ FROM YOUR joblist.txt FILE. # # #
 
 here=`pwd`
-joblist=${here}'/hq-matti-genomes.csv'
-there=${here}'/Runs'
+joblist=${here}'/matti-hq-genomes.csv'
+there=${here}'/Vitamin_Runs'
 
 
 #-------------- Determine the number of jobs to run based on file list  --------------------

@@ -1,8 +1,8 @@
 #!/bin/bash
 
 here=`pwd`
-jobslist=${here}'/hq-matti-genomes.csv' # can change this to title of your joblist file
-there='Runs'
+jobslist=${here}'/matti-hq-genomes.csv' # can change this to title of your joblist file
+there='Vitamin_Runs'
 
 #------Create run folder and move unique files into the run folder----------------------------------#
 if [[ -d ${there} ]]
@@ -40,8 +40,8 @@ do
    genSLURM=${there}'/submit-'${curr_genome}'.slurm'
    
    #---- copy template and data files to runs folder 
-cp -f ${here}'/batch-rescue-single-addition.py' ${genPY}
-cp -f ${here}'/submit-batch-single-addition.slurm' ${genSLURM}
+cp -f ${here}'/batch-rescue-sole-C-media.py' ${genPY}
+cp -f ${here}'/submit-batch-media-addition.slurm' ${genSLURM}
    # # # NOTE: This is currently making all files in the /Runs/ directory.
    # # # You can split the files to have them save in separate folders per job as well.
    

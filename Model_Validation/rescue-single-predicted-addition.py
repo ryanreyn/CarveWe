@@ -35,7 +35,7 @@ cobra_logger.setLevel(logging.CRITICAL)
 print("Successfully loaded packages!")
 
 #name of this run/run type:
-run_name = "predicted_media_single_add_test"
+run_name = "rerun_predicted_media_single_add_test"
 
 #step 1
 #generate a list with all the genome names and one with all the ensemble sizes
@@ -48,6 +48,9 @@ os.listdir(directory)
 #read in an individual file
 #loop through all the files in the folder
 genomes = []
+
+#assign a value for the max flux to permit in each added rescue compound
+lb=(-1000)
 for file in os.listdir(directory):
   filename = os.fsdecode(file)
 
@@ -169,10 +172,16 @@ def find_media_rxns(genome, model, data_path):
 #initialize dictionary
 growth_info = {} #initialize dictionary
 
+#initialize a dataframe to store the info in a flatter way
+unraveled_df = pd.DataFrame(columns = ["Genome","Tested Compound","Model","Rescue Compound","Rescue Growth"])
+
+
 for genome in hq_genomes:
     #import model and reaction states
   model = read_sbml_model('%s/%s.xml'%(xml_path, genome))
   rxn_states = pd.read_csv('%s/%s_rxn-info.csv' %(rxn_path, genome), header = None, index_col=0)
+
+  print("Running genome ",genome)
 
   #initialize for genome
   growth_info[genome] = {}
@@ -216,6 +225,11 @@ for genome in hq_genomes:
       solution = model.slim_optimize()
       growth_info[genome][predrxn][count]['all_rxns'] = solution
 
+      #append this solution to the running dataframe
+      new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["all_rxns"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+      unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
+
       #turn off all Carbon containing rxns:
       for reaction in model.exchanges:
         for metabolite in reaction.metabolites:
@@ -229,10 +243,14 @@ for genome in hq_genomes:
       solution = model.slim_optimize()
       growth_info[genome][predrxn][count]['no_C'] = solution
 
+      #append this solution to the running dataframe
+      new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["no_C"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+      unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
       #turn the vitamins back on:
       for vit in vitamins.index:
         try: #turn on given rxn
-          model.reactions.get_by_id(vit).lower_bound = -1000
+          model.reactions.get_by_id(vit).lower_bound = lb
         except KeyError:
           continue
 
@@ -240,20 +258,33 @@ for genome in hq_genomes:
       solution = model.slim_optimize()
       growth_info[genome][predrxn][count]['only_vitamins'] = solution
 
+      #append this solution to the running dataframe
+      new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["only_vitamins"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+      unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
       #turn on the metabolite one by one and then add all single C sources:
-      model.reactions.get_by_id(predrxn).lower_bound = -1000
+      model.reactions.get_by_id(predrxn).lower_bound = lb
       #optimize with only that compound as a baseline
       solution = model.slim_optimize()
       growth_info[genome][predrxn][count]['no_matti']= solution
 
+      #append this solution to the running dataframe
+      new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["no_matti"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+      unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
       #loop through all the lab metabolites and add back a single C source:
       for exrxn in lab_mets['Exchange_rxn']:
         try: #turn on given rxn
-          model.reactions.get_by_id(exrxn).lower_bound = -1000
+          model.reactions.get_by_id(exrxn).lower_bound = lb
 
           #calculate growth rate
           solution = model.slim_optimize()
           growth_info[genome][predrxn][count][exrxn]= solution
+
+          #append this solution to the running dataframe
+          new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": [exrxn],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+          unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
 
           #turn off the rxn again
           model.reactions.get_by_id(exrxn).lower_bound = 0
@@ -266,6 +297,10 @@ for genome in hq_genomes:
 
       #add to count
       count += 1
+
+
+#export the flat dataframe to a file to save it
+unraveled_df.to_csv("../Output/unraveled_first-rescue-growth.csv")
 
 #Identify percentage of the models and C substrates that produced growth with predicted compound addition
 

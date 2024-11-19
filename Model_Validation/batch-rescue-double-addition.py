@@ -8,6 +8,7 @@ from cobra.medium import minimal_medium
 import numpy as np
 import pandas as pd
 
+import json
 
 #import matplotlib.patches as pat
 #import matplotlib as mpl
@@ -44,8 +45,8 @@ run_name = "sub_runname"
 # directory = os.fsencode('/project/nmherrer_110/acweiss/ensemble_media/matti_media')
 # os.listdir(directory)
 
-#read in an individual file
-#loop through all the files in the folder
+# #read in an individual file
+# #loop through all the files in the folder
 # genomes = []
 # for file in os.listdir(directory):
 #   filename = os.fsdecode(file)
@@ -80,7 +81,7 @@ run_name = "sub_runname"
 # #create a dataframe from the dictionary
 # rxn_df = pd.DataFrame.from_dict(rxn_info, orient = "index")
 
-# len(rxn_df[(rxn_df.mean_freq >= 0.9) & (rxn_df.mean_freq <= 0.96)])
+# len(rxn_df[(rxn_df.mean_freq >= 0.8)])
 
 #load in all the dependancy files
 #load matti vitamins
@@ -89,19 +90,12 @@ vitamins = pd.read_csv('../Data/matti_vitamins.csv', index_col = 0)
 rxn_freqs = pd.read_csv('../Data/matti_rxn_info.csv', index_col = 0)
 #load in the lab IDs file
 lab_mets = pd.read_csv('../Data/matti_lab_metabolite_ids.csv', index_col = 0)
+#import failing genomes file
+failing_genomes = pd.read_csv('../Data/matti_rescues_failing_genomes_20241010.csv', index_col = 0)
 
 
-
-#set high quality genomes
-# hq_genomes = []
-
-# #loop through all the genomes
-# for genome in genomes:
-#   if rxn_freqs.loc[genome, 'mean_freq'] >= .9:
-#     if rxn_freqs.loc[genome, 'mean_freq'] <= .96:
-#       hq_genomes.append(genome)
-
-# len(hq_genomes)
+#set high quality genomes based on index of failing genomes file
+hq_genomes = failing_genomes.index
 
 #Set all the carbon containing reactions to 0 and turn on all the other reactions
 
@@ -159,8 +153,9 @@ def find_media_rxns(genome, model, data_path):
   #now try dropping the vitamins
   media = media.drop(index=vitamins.index, errors='ignore')
 
+  #in this case don't drop the matti compounds
   #now try droppint the matti compounds:
-  media = media.drop(index=lab_mets['Exchange_rxn'].values, errors='ignore')
+  #media = media.drop(index=lab_mets['Exchange_rxn'].values, errors='ignore')
 
   return media
 
@@ -177,8 +172,6 @@ genome='sub_genome'
 model = read_sbml_model('%s/%s.xml'%(xml_path, genome))
 rxn_states = pd.read_csv('%s/%s_rxn-info.csv' %(rxn_path, genome), header = None, index_col=0)
 
-print("Running genome ",genome)
-
 #initialize for genome
 growth_info[genome] = {}
 #growth_info[genome]['growth_rates_no_C'] = [] #growth rate in own media
@@ -186,120 +179,136 @@ growth_info[genome] = {}
 #store original bounds for fluxes for this model:
 original_bounds = []
 for x in model.reactions:
-  lb = x.lower_bound
-  ub = x.upper_bound
-  original_bounds.append((lb, ub))
+    lb = x.lower_bound
+    ub = x.upper_bound
+    original_bounds.append((lb, ub))
 
 #generate dataframe of predicted media reactions which are unique to that recipe
 #meaning they are carbon containing but not matti compounds or vitamins
 pred_med = find_media_rxns(genome, model, data_path)
 
+#set rescue compound based on best rescue
+rescue_comp = failing_genomes.loc[genome, "best_rescue"]
+
 #loop through for each predicted media component
 for predrxn in pred_med.index:
-  growth_info[genome][predrxn] = {}
+    growth_info[genome][predrxn] = {}
 
-  count = 0
+    count = 0
 
-  #loop through all the individual models
-  while count < 60:
-    #restore original bounds
-    restore_rxn_states(model, original_bounds)
+    #only use rxns other than the rescue comp:
+    if predrxn != rescue_comp:
 
-    #initialize for model
-    growth_info[genome][predrxn][count] = {}
+        #loop through all the individual models
+        while count < 60:
+        #restore original bounds
+            print(original_bounds)
+            restore_rxn_states(model, original_bounds)
 
-    #set reaction bounds to 0 for reactions that have reaction state of 0
-    i = 0
-    for x in model.reactions:
-      is_present = rxn_states.iloc[i,count]
-      if is_present == 0:
-        x.lower_bound = 0.
-        x.upper_bound = 0.
-      i +=1
+            #initialize for model
+            growth_info[genome][predrxn][count] = {}
 
-    #save positive control, all rxns on
-    solution = model.slim_optimize()
-    growth_info[genome][predrxn][count]['all_rxns'] = solution
+            #set reaction bounds to 0 for reactions that have reaction state of 0
+            i = 0
+            for x in model.reactions:
+                is_present = rxn_states.iloc[i,count]
+                if is_present == 0:
+                    x.lower_bound = 0.
+                    x.upper_bound = 0.
+                    i +=1
 
-    #append this solution to the running dataframe
-    new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["all_rxns"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
-    unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+            #save positive control, all rxns on
+            solution = model.slim_optimize()
+            growth_info[genome][predrxn][count]['all_rxns'] = solution
 
-
-    #turn off all Carbon containing rxns:
-    for reaction in model.exchanges:
-      for metabolite in reaction.metabolites:
-          if contains_carbon(metabolite):
-              # Turn on the reaction by setting a lower bound
-              reaction.lower_bound = 0  # turn off rxn
-              #reaction.upper_bound = 0  # turn off rxn
-              break  # No need to check other metabolites if one already contains carbon
-
-    #save negative control, all rxns off
-    solution = model.slim_optimize()
-    growth_info[genome][predrxn][count]['no_C'] = solution
-
-    #append this solution to the running dataframe
-    new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["no_C"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
-    unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
-
-    #turn the vitamins back on:
-    for vit in vitamins.index:
-      try: #turn on given rxn
-        model.reactions.get_by_id(vit).lower_bound = fixed_bound
-      except KeyError:
-        continue
-
-    #save positive control, all vitamins on
-    solution = model.slim_optimize()
-    growth_info[genome][predrxn][count]['only_vitamins'] = solution
-
-    #append this solution to the running dataframe
-    new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["only_vitamins"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
-    unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
-
-    #turn on the metabolite one by one and then add all single C sources:
-    model.reactions.get_by_id(predrxn).lower_bound = fixed_bound
-    #optimize with only that compound as a baseline
-    solution = model.slim_optimize()
-    growth_info[genome][predrxn][count]['no_matti']= solution
-
-    #append this solution to the running dataframe
-    new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["no_matti"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
-    unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
-
-    #loop through all the lab metabolites and add back a single C source:
-    for exrxn in lab_mets['Exchange_rxn']:
-      try: #turn on given rxn
-        model.reactions.get_by_id(exrxn).lower_bound = fixed_bound
-
-        #calculate growth rate
-        solution = model.slim_optimize()
-        growth_info[genome][predrxn][count][exrxn]= solution
-
-        #append this solution to the running dataframe
-        new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": [exrxn],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
-        unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+            #append this solution to the running dataframe
+            new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["all_rxns"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+            unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
 
 
-        #turn off the rxn again
-        model.reactions.get_by_id(exrxn).lower_bound = 0
+            #turn off all Carbon containing rxns:
+            for reaction in model.exchanges:
+                for metabolite in reaction.metabolites:
+                    if contains_carbon(metabolite):
+                        # Turn on the reaction by setting a lower bound
+                        reaction.lower_bound = 0  # turn off rxn
+                        #reaction.upper_bound = 0  # turn off rxn
+                        break  # No need to check other metabolites if one already contains carbon
 
-      except KeyError:
-        continue
-    
-    #turn off the precicted compound again
-    model.reactions.get_by_id(predrxn).lower_bound = 0
+            #save negative control, all rxns off
+            solution = model.slim_optimize()
+            growth_info[genome][predrxn][count]['no_C'] = solution
 
-    #add to count
-    count += 1
+            #append this solution to the running dataframe
+            new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["no_C"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+            unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
+            #turn the vitamins back on:
+            for vit in vitamins.index:
+                try: #turn on given rxn
+                    model.reactions.get_by_id(vit).lower_bound = fixed_bound
+                except KeyError:
+                    continue
+
+            #save positive control, all vitamins on
+            solution = model.slim_optimize()
+            growth_info[genome][predrxn][count]['only_vitamins'] = solution
+
+            #append this solution to the running dataframe
+            new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["only_vitamins"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+            unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
+            #turn on the first rescue metabolite if there was one, if not save agreement value
+            if rescue_comp == 'agreement':
+                growth_info[genome][predrxn][count]['first_rescue'] = solution
+            else: 
+                model.reactions.get_by_id(rescue_comp).lower_bound = fixed_bound
+                solution = model.slim_optimize()
+                growth_info[genome][predrxn][count]['first_rescue']= solution
+
+            #turn on the metabolite one by one and then add all single C sources:
+            model.reactions.get_by_id(predrxn).lower_bound = fixed_bound
+            #optimize with only that compound as a baseline
+            solution = model.slim_optimize()
+            growth_info[genome][predrxn][count]['no_matti']= solution
+
+            #append this solution to the running dataframe
+            new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": ["no_matti"],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+            unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
+            #loop through all the lab metabolites and add back a single C source:
+            for exrxn in lab_mets['Exchange_rxn']:
+                try: #turn on given rxn
+                    model.reactions.get_by_id(exrxn).lower_bound = fixed_bound
+
+                    #calculate growth rate
+                    solution = model.slim_optimize()
+                    growth_info[genome][predrxn][count][exrxn]= solution
+
+                    #append this solution to the running dataframe
+                    new_row = pd.DataFrame({"Genome": [genome],"Tested Compound": [exrxn],"Model": [count],"Rescue Compound": [predrxn], "Rescue Growth": [solution]})
+                    unraveled_df = pd.concat([unraveled_df, new_row], axis=0, ignore_index=True)
+
+
+                    #turn off the rxn again
+                    model.reactions.get_by_id(exrxn).lower_bound = 0
+
+                except KeyError:
+                    continue
+
+            #turn off the precicted compound again
+            model.reactions.get_by_id(predrxn).lower_bound = 0
+
+            #add to count
+            count += 1
 
 
 #export the flat dataframe to a file to save it
-if not os.path.isfile("../Output/unraveled_first-rescue-growth.csv"):
-  unraveled_df.to_csv("../Output/unraveled_first-rescue-growth.csv",index=False)
+outfile="../Output/unraveled_double-rescue-growth.csv"
+if not os.path.isfile(outfile):
+  unraveled_df.to_csv(outfile,index=False)
 else:
-  unraveled_df.to_csv("../Output/unraveled_first-rescue-growth.csv",mode="a",header=False,index=False)
+  unraveled_df.to_csv(outfile,mode="a",header=False,index=False)
 
 print("Successfully printed data")
 
@@ -313,17 +322,17 @@ metabolite_dict = {}
 genome='sub_genome'
 metabolite_dict[genome] = {}
 for predrxn in growth_info[genome].keys():
-  curr_frame = pd.DataFrame.from_dict(growth_info[genome][predrxn],orient="index").T
-  sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no_matti"]) - curr_frame.loc['no_matti'].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
-  #print(len(sub_vitamins))
+    curr_frame = pd.DataFrame.from_dict(growth_info[genome][predrxn],orient="index").T
+    sub_vitamins = curr_frame.drop(['all_rxns','no_C','only_vitamins', "no_matti", "first_rescue"]) - curr_frame.loc["no_matti"].values.squeeze() - curr_frame.loc['no_C'].values.squeeze()
+    #print(len(sub_vitamins))
 
-  #Determine whether the models could grow sufficiently (for now we will say a growth rate of >1) with vitamin rescue
-  check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].sum(axis=1)>= (sub_vitamins.shape[1] / 2)].tolist()
-  #check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].any(axis=1)].tolist()
-  new_row = [predrxn, genome, len(check_growth),len(check_growth)/len(sub_vitamins)]
-  metabolite_recovery.append(new_row)
-  metabolite_dict[genome][predrxn] = check_growth
-  #print(check_growth)
+    #Determine whether the models could grow sufficiently (for now we will say a growth rate of >1) with vitamin rescue
+    check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].sum(axis=1)>= (sub_vitamins.shape[1] / 2)].tolist()
+    #check_growth = sub_vitamins.index[sub_vitamins[sub_vitamins>=1].any(axis=1)].tolist()
+    new_row = [predrxn, genome, len(check_growth),len(check_growth)/len(sub_vitamins)]
+    metabolite_recovery.append(new_row)
+    metabolite_dict[genome][predrxn] = check_growth
+    #print(check_growth)
 
 #metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Predicted_Metabolite', 'Genome','Num_Metabolites','Perc_Metabolites'],index = growth_info[genome].keys())
 metab_recovery_df = pd.DataFrame(metabolite_recovery, columns = ['Predicted_Metabolite', 'Genome','Num_Metabolites','Perc_Metabolites'])
@@ -335,5 +344,10 @@ recovered_metabolites = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in metabol
 #print(len([y for y in metab_recovery_df['Num_Metabolites'] if y > 0]))
 
 #save the output for number and percentage of genomes containing something:
-metab_recovery_df.to_csv("Runs/%s_recovery.csv" %(run_name))
-recovered_metabolites.to_csv("Runs/%s_rescued_metabolites.csv" %(run_name))
+#metab_recovery_df.to_csv("../Output/%s_recovery.csv" %(run_name))
+#recovered_metabolites.to_csv("../Output/%s_rescued_metabolites.csv" %(run_name))
+
+#save whole growth_info dictionary as a json
+#filepath = '../Output/%s_dict.json' %run_name
+#with open(filepath, 'w') as f:
+#    json.dump(growth_info, f)

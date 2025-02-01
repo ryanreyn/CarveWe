@@ -1,7 +1,7 @@
 ---
 title: "Kohonen-based SOM clustering directly on growth sensitivity data (high-quality data subset)"
 output: html_document
-date: "2023-08-04"
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
 knit: (function(input, ...) {
     rmarkdown::render(
       input,
@@ -58,7 +58,7 @@ metabolite_dictionary<-read.csv("./Data/all_max_flux_met_names_diamond.csv")
 metabolite_info<-read.csv("Data/all_max_flux_diamond_transposed.csv")
 file_headers<-read.csv("Data/all_max_flux_headers_diamond.csv")
 
-load(file="data/new-growth50-test-data_all-cats.Rdata")
+load(file="Data/new-growth50-test-data_all-cats.Rdata")
 
 #Fix some string display issues with metabolite class names
 remove_classes<-unique(all_dat$X)[-12]; metab_classes<-unique(all_dat$metab_class)[-c(7,8,12)]
@@ -143,9 +143,11 @@ gridsize=20
 num_clusters=8
 
 set.seed(123)
+#Uncomment the below lines to be able to generate a map de novo
 # som.grid<-somgrid(xdim=gridsize,ydim=gridsize,topo="hexagonal",toroidal=TRUE)
 # som.model<-som(metabolite_matrix,grid=som.grid,rlen=1500,alpha=c(0.025,0.01))
 
+#Comment this line out if you plan to generate a map de novo
 load("Data/final-kohonen-som.RData")
 
 #This has been an issue but we need to set the specific seed present *after* running the original SOM model to be able to reproduce the exact results
@@ -175,45 +177,52 @@ clusterMeanDist <- function(clusters){
 }
 
 try.k <- 2:20
-cluster.dist.eval <- as.data.frame(matrix(ncol = 3, nrow = (length(try.k))))
-colnames(cluster.dist.eval) <- c('k', 'kmeans', 'hclust')
 
-for(i in 1:length(try.k)) {
-  cluster.dist.eval[i, 'k'] <- try.k[i]
-  cluster.dist.eval[i, 'kmeans'] <- clusterMeanDist(kmeans(carve.som, centers = try.k[i], iter.max = 20)$cluster)
-  cluster.dist.eval[i, 'hclust'] <- clusterMeanDist(cutree(hclust(vegdist(carve.som,method="euclidean")), k = try.k[i]))
-}
+#Load the pre-saved cluster data
+load("Data/final-som-clusters.RData")
+k <- num_clusters
 
-plot(cluster.dist.eval[, 'kmeans'] ~ try.k,
-     type = 'l')
+#There's a nebulous issue with defining seeds while generating a markdown file, so at the moment we are loading a pre-saved data object containing the relevant cluster definitions using the correct seeds. You can uncomment this if you wish to run the chunks directly.
 
-lines(cluster.dist.eval[, 'hclust'] ~ try.k,
-      col = 'red')
-
-legend('topright',
-       legend = c('k-means', 'hierarchical'),
-       col = c('black', 'red'),
-       lty = c(1, 1))
-
-
-cluster.tries <- list()
-
-for(k in num_clusters){
-  
-  ## k-means clustering
-  
-  som.cluster.k <- kmeans(carve.som, centers = k, iter.max = 10000, nstart = 10)$cluster # k-means
-  
-  ## hierarchical clustering
-  
-  som.dist <- dist(carve.som) # hierarchical, step 1
-  som.cluster.h <- cutree(hclust(som.dist), k = k) # hierarchical, step 2
-  
-  ## capture outputs
-  
-  cluster.tries[[paste0('som.cluster.k.', k)]] <- som.cluster.k
-  cluster.tries[[paste0('som.cluster.h.', k)]] <- som.cluster.h
-}
+# cluster.dist.eval <- as.data.frame(matrix(ncol = 3, nrow = (length(try.k))))
+# colnames(cluster.dist.eval) <- c('k', 'kmeans', 'hclust')
+# 
+# for(i in 1:length(try.k)) {
+#   cluster.dist.eval[i, 'k'] <- try.k[i]
+#   cluster.dist.eval[i, 'kmeans'] <- clusterMeanDist(kmeans(carve.som, centers = try.k[i], iter.max = 20)$cluster)
+#   cluster.dist.eval[i, 'hclust'] <- clusterMeanDist(cutree(hclust(vegdist(carve.som,method="euclidean")), k = try.k[i]))
+# }
+# 
+# plot(cluster.dist.eval[, 'kmeans'] ~ try.k,
+#      type = 'l')
+# 
+# lines(cluster.dist.eval[, 'hclust'] ~ try.k,
+#       col = 'red')
+# 
+# legend('topright',
+#        legend = c('k-means', 'hierarchical'),
+#        col = c('black', 'red'),
+#        lty = c(1, 1))
+# 
+# 
+# cluster.tries <- list()
+# 
+# for(k in num_clusters){
+# 
+#   ## k-means clustering
+# 
+#   som.cluster.k <- kmeans(carve.som, centers = k, iter.max = 10000, nstart = 10)$cluster # k-means
+# 
+#   ## hierarchical clustering
+# 
+#   som.dist <- dist(carve.som) # hierarchical, step 1
+#   som.cluster.h <- cutree(hclust(som.dist), k = k) # hierarchical, step 2
+# 
+#   ## capture outputs
+# 
+#   cluster.tries[[paste0('som.cluster.k.', k)]] <- som.cluster.k
+#   cluster.tries[[paste0('som.cluster.h.', k)]] <- som.cluster.h
+# }
 
 obs_density<-data.frame(node=som.model$unit.classif)%>%group_by(node)%>%summarise(count=n())
 
@@ -301,7 +310,7 @@ for (i in 1:length(genome_IDs)){
   curr_point<-ids[curr_indices]%>%table()
   
   major<-which(curr_point %in% max(curr_point)) %>% names(curr_point)[.] %>% as.numeric()
-  #There are a handful of models (14 in the current construction, 10x10 grid for the >50% genomes) that have two SOM clusters that tie for majority so we are randomly selecting in those cases
+  #In the rare instance where an ensemble's models are perfectly split over two SOM nodes, we will randomly select the winning node to assign that genome to
   if (length(major)==1){
     majority_gridpoint<-c(majority_gridpoint,major)
   } else {
@@ -577,7 +586,7 @@ out_tree3 <- gheatmap2(t_plot3, qual_df, offset= 14, width=0.1, colnames = FALSE
   #                               frame.colour = "black", ticks.colour = "black", barwidth = 10),
   #        fill = guide_colorbar(title.hjust = 0.5, title.position = "top",
   #                              frame.colour = "black", ticks.colour = "black",barwidth = 10)) +
-  labs(fill = "Consensus", color = "Consensus") 
+  labs(fill = "Consensus", color = "Consensus")
 
 t_plot4 <- out_tree3 + new_scale_color() + new_scale_fill()
 
@@ -801,7 +810,7 @@ group.metab.df$metabolite_class <- factor(group.metab.df$metabolite_class,
                                      levels = metab_order$metabolite_class)
 
 new_df <- group.metab.df %>% group_by(metabolite_class) %>%
-  mutate(scaled_flux = ((means - min(means-sds))/(max(means+sds)-min(means-sds))))
+  mutate(scaled_flux = (((means+sds) - min(means-sds))/(max(means+sds)-min(means-sds))))
 
 new_df$metabolite_class <- factor(new_df$metabolite_class,
                                      levels = metab_order$metabolite_class)
@@ -856,14 +865,17 @@ sub_df<-new_df%>%filter(!metabolite_class%in%c("Alcohol","Amines/Amides","Ketone
   metabolite_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
   .default=metabolite_class
 ))
+sub_df<-sub_df%>%mutate(Group=case_when(clusters%in%c(1,3,7,8) ~ "slow", clusters == 2 ~ "fast", clusters%in%c(4,6) ~ "slow intermediate", clusters==5 ~ "fast intermediate"))
+sub_df$Group<-as_factor(sub_df$Group)
 
 flux_bubble_plot <- ggplot() +
+  geom_point(data=sub_df,aes(x=clusters,y=metabolite_class,color=Group),size=0.001)+
   geom_vline(xintercept = factor(1:num_clusters), lty = 2, linewidth = 0.25) +
   geom_point(data = sub_df, aes(x = clusters, y = metabolite_class, fill = means, size = scaled_flux),pch=21) +
-  scale_fill_gradientn(colours = c("darkorchid","gold"),
-                       guide = "colorbar", limits=c(0,1), breaks = c(0,0.5,1),labels=c("0","0.5","1")) +
-  scale_radius(range = c(10,30),limits = c(min(sub_df$means),1),breaks=c(min(sub_df$means),0.5,1),labels=c("0","0.5","1"),guide="legend") +
+  scale_fill_viridis_c(option="plasma")+
+  scale_radius(range = c(5,25),limits = c(min(sub_df$means),1),breaks=c(min(sub_df$means),0.5,1),labels=c("0","0.5","1"),guide="legend") +
   labs(x = "Cluster", fill = "Growth Sensitivity", size = "Relative Sensitivity") +
+  scale_color_manual(values=c("#619CFF","#F8766D","#00BA38","yellowgreen"))+
   scale_y_discrete(limits=rev)+
   theme(panel.background = element_blank(),
         panel.border = element_rect(fill = NA, color = "black"),
@@ -874,9 +886,10 @@ flux_bubble_plot <- ggplot() +
         legend.text = element_text(size  =20),
         legend.title = element_text(size  =20),
         legend.position = "bottom",
-        legend.direction = "horizontal") +
+        legend.direction = "horizontal",
+        legend.key = element_blank()) +
   guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(3.5, "in"),
-                               ticks.colour = "black", frame.colour = "black"),size=guide_legend(title.position="top",title.hjust=0.5))
+                               ticks.colour = "black", frame.colour = "black", order=2), size=guide_legend(title.position="top",title.hjust=0.5, order=3), color=guide_legend(nrow=2, title.position="top", title.hjust=0.5, override.aes=list(size=7.5,pch=15), order=1))
 
 #We also want to try to make a version where we only display the average relative flux values for each 
 #Create a mean df from the classifiers df
@@ -2825,7 +2838,7 @@ superregion.rpkm.table<-boot_df%>%select(cluster,SuperRegion,boot_mean)%>%pivot_
 colnames(superregion.rpkm.table)<-c("Regime",paste("Cluster",c(1:num_clusters)))
 
 #Save the p-values from the growth distribution comparisons
-tukey_df<-TUKEY[["growth_df$clusters"]]%>%as.data.frame()
+tukey_df<-TUKEY[["adj_total_flux$cluster"]]%>%as.data.frame()
 tukey_df<-tukey_df%>%mutate(names=rownames(tukey_df))
 
 p.value.table<-tukey_df%>%select(names,"p adj")

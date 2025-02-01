@@ -1,0 +1,2451 @@
+---
+title: "Kohonen-based SOM clustering directly on growth sensitivity data (high-quality data subset)"
+output: html_document
+date: "`r format(Sys.time(), '%Y-%m-%d')`"
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "../Output",
+      output_file= "final-reproduce-pub.html"
+    )
+  })
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE, fig.height=12, fig.width=12)
+knitr::opts_knit$set(root.dir="/Users/Ryan/Documents/Levine_Lab/R_Studio/CarveWe")
+#Load in packages
+library(SOMbrero)
+library(gplots)
+library(tidyverse)
+library(patchwork)
+library(purrr)
+library(ragg)
+library(ggtree)
+library(treeio)
+library(ggnewscale)
+library(vegan)
+library(multcompView)
+library(ggridges)
+library(kohonen)
+library(ggfortify)
+library(ggtext)
+library(ggbreak)
+library(png)
+#Set a random seed
+set.seed(123)
+#Make/call functions
+
+#We need to do some bootstrapping analysis per a request from Cameron. I think what we need to do is bootstrap the genomes in each cluster and then compute sums and relative abundances -> get a CI on relative abundance per cluster per region -> using functions from Ben Temperton
+bootstrap_sum_pi <- function(data, func, size=1000){
+  bs_sample = sample(data, size=size, replace=TRUE)
+  do.call(func, list(x=bs_sample))
+}
+
+generate_bootstrap_replicates <- function(data, func, n=1000, size=1000){
+  replicate(n, do.call(bootstrap_sum_pi, list(data=data, func=func, size=size)))
+}
+
+#We need to perform many iterations of clustering and optimize according to an objective function, so we will use this pre-built helper function to look at the distance between cluster means
+clusterMeanDist <- function(clusters){
+  cluster.means = c()
+  
+  for(c in unique(clusters)){
+    temp.members <- which(clusters == c)
+    
+    if(length(temp.members) > 1){
+      temp.dist <- som.dist[temp.members,]
+      temp.dist <- temp.dist[,temp.members]
+      cluster.means <- append(cluster.means, mean(temp.dist))
+    }else(cluster.means <- append(cluster.means,0))
+  }
+  
+  return(mean(cluster.means))
+  
+}
+
+```
+
+## Data Setup
+
+```{r reading data, echo=FALSE,include=FALSE}
+#We will attempt to pre-merge the metabolites by metabolite class to see how this impacts SOMs and results
+class_file <- read.csv("Data/classified_metabolites.csv")
+
+#Try pre-filtering out Inorganics as well since they dominate the total flux by fraction
+class_file <- class_file%>%distinct(Metabolite,.keep_all=TRUE)%>%filter(!Higher.Level.Classification%in%c("Other","Inorganic"))
+
+#Load in the necessary data files and reformat as necessary
+metabolite_dictionary <- read.csv("./Data/all_max_flux_met_names_diamond.csv")
+metabolite_info <- read.csv("Data/all_max_flux_diamond_transposed.csv")
+file_headers <- read.csv("Data/all_max_flux_headers_diamond.csv")
+
+load(file="Data/new-growth50-test-data_all-cats.Rdata")
+
+#Fix some string display issues with metabolite class names
+remove_classes <- unique(all_dat$X)[-12]; metab_classes <- unique(all_dat$metab_class)[-c(7,8,12)]
+
+match_rows <- match(all_dat$metab_class,metab_classes,nomatch=NA)
+
+all_dat <- all_dat%>%
+  mutate(X=case_when(X%in%remove_classes ~ metab_classes[match(X,remove_classes)],
+                     !X%in%remove_classes ~ X))
+
+#Now we will separate out the original fluxes and add them to the dataframe so we can then compute differences
+original_dat <- filter(all_dat,X=="original_media")
+adjusted_dat <- filter(all_dat,X!="original_media")
+
+#For the version where we reduced the flux of metabolite classes to 0 there are some models with no growth so we should exclude those
+nogrow_dat <- adjusted_dat%>%
+  filter(metab_class=="Growth"&averaged_flux<=10^-6)%>%
+  reframe(ids=unique(paste(X,genome,model)))%>%
+  as.matrix()
+
+adjusted_dat <- adjusted_dat%>%
+  mutate(key=paste(X,genome,model))%>%
+  filter(!key%in%nogrow_dat)%>%select(-key)
+
+#This line would be to average by all the models but we have information per model so not necessary (or reflective maybe). Requires adjusting the following lines too
+# adjusted_dat <- adjusted_dat%>%group_by(X,metab_class,genome)%>%summarise(averaged_flux=mean(averaged_flux))%>%arrange(genome)
+
+adjusted_dat$orig_flux <- original_dat$averaged_flux[match(paste(adjusted_dat$genome,adjusted_dat$model,adjusted_dat$metab_class),paste(original_dat$genome,original_dat$model,original_dat$metab_class))]
+
+#There are some genomes with no metabolites from certain metabolite classes so let's now remove any rows with NA for the orig_flux
+adjusted_dat <- adjusted_dat%>%
+  filter(!is.na(orig_flux))
+
+#We are now filtering out the archaeal genomes from the dataset and will do that by loading a pre-determined list of the high quality bacterial genomes and filtering the data frame
+load("Data/hq-bacterial-genomes.RData")
+adjusted_dat <- adjusted_dat%>%
+  filter(genome%in%bacterial.hq.genomes)
+
+#Line for potentially excluding certain compound classes from the SOM
+# adjusted_dat <- adjusted_dat%>%filter(metab_class!="Carboxylic Acid")
+
+#We also want to make a growth corrected version of the data where we standardize the values by the differences in the original versus adjusted data
+growth_correction <- adjusted_dat%>%
+  filter(metab_class=="Growth")%>%
+  mutate(correction=orig_flux/averaged_flux)%>%
+  select(X,genome,model,correction)
+
+adjusted_dat$correction <- growth_correction$correction[match(paste(adjusted_dat$X,adjusted_dat$model,adjusted_dat$genome),paste(growth_correction$X,growth_correction$model,growth_correction$genome))]
+
+all.grow_df <- adjusted_dat%>%
+  filter(metab_class=="Growth")%>%
+  group_by(genome,model,X)%>%
+  mutate(growth_req=case_when(averaged_flux/orig_flux<=1 ~ (2*(1-averaged_flux/orig_flux)),
+                              averaged_flux/orig_flux>1 ~ 0))%>%
+  reframe(growth_req=mean(growth_req))
+
+colnames(all.grow_df) <- c("genome","model","metabolite_class","growth_req")
+
+all.grow_df <- all.grow_df%>%
+  pivot_wider(names_from=metabolite_class,values_from=growth_req)
+
+metabolite_matrix <- all.grow_df%>%
+  select(-c(genome,model))%>%
+  as.matrix()
+
+rownames(metabolite_matrix) <- all.grow_df$genome%>%as.vector()
+
+```
+
+```{r Custom Themes and Colors, echo=FALSE, include=FALSE}
+
+custom_theme <- theme(plot.title=element_text(hjust=0.5),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 16),
+        axis.text = element_text(size =16),
+        axis.title = element_text(size = 16),
+        legend.text = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        legend.key = element_blank())
+
+cluster_colors <- c("#243a56","#cd5b34","#4e7b94","#547e48","#a6a541","#60bb68","#5279ca","#86c1de")
+
+phylo_colors <- c("#b8617c","#63b750","#895bc9","#b2b53b","#c84ca3","#3d854f","#d74164","#54bf9f","#cf5230","#54acd8","#d48e36","#5f7ac7","#6e772c","#bf83c9","#bca262")
+
+```
+
+## Methods
+
+# Running Code
+## Running the SOM clustering procedure with our given parameters.
+
+
+```{r Run SOMs}
+#Code using kohonen package instead of sombrero
+gridsize=20
+num_clusters=8
+
+set.seed(123)
+#Uncomment the below lines to be able to generate a map de novo
+# som.grid <- somgrid(xdim=gridsize,ydim=gridsize,topo="hexagonal",toroidal=TRUE)
+# som.model <- som(metabolite_matrix,grid=som.grid,rlen=1500,alpha=c(0.025,0.01))
+
+#Comment this line out if you plan to generate a map de novo
+load("Data/final-kohonen-som.RData")
+
+#This has been an issue but we need to set the specific seed present *after* running the original SOM model to be able to reproduce the exact results
+.Random.seed <- good.seed
+
+#Plot the training progress to see and also to ensure right parameters were used
+# plot(som.model,type="changes")
+
+carve.som <- som.model$codes[[1]]
+som.dist <- as.matrix(dist(carve.som))
+
+try.k <- 2:20
+
+#Load the pre-saved cluster data
+load("Data/final-som-clusters.RData")
+k <- num_clusters
+
+#There's a nebulous issue with defining seeds while generating a markdown file, so at the moment we are loading a pre-saved data object containing the relevant cluster definitions using the correct seeds. You can uncomment this if you wish to run the chunks directly.
+
+# cluster.dist.eval <- as.data.frame(matrix(ncol = 3, nrow = (length(try.k))))
+# colnames(cluster.dist.eval) <- c('k', 'kmeans', 'hclust')
+# 
+# for(i in 1:length(try.k)) {
+#   cluster.dist.eval[i, 'k'] <- try.k[i]
+#   cluster.dist.eval[i, 'kmeans'] <- clusterMeanDist(kmeans(carve.som, centers = try.k[i], iter.max = 20)$cluster)
+#   cluster.dist.eval[i, 'hclust'] <- clusterMeanDist(cutree(hclust(vegdist(carve.som,method="euclidean")), k = try.k[i]))
+# }
+
+#Plot the kmeans distances as a function of the number of clusters for both clustering methodologies
+plot(cluster.dist.eval[, 'kmeans'] ~ try.k,
+     type = 'l')
+
+lines(cluster.dist.eval[, 'hclust'] ~ try.k,
+      col = 'red')
+
+legend('topright',
+       legend = c('k-means', 'hierarchical'),
+       col = c('black', 'red'),
+       lty = c(1, 1))
+
+
+# cluster.tries <- list()
+# 
+# for(k in num_clusters){
+# 
+#   ## k-means clustering
+# 
+#   som.cluster.k <- kmeans(carve.som, centers = k, iter.max = 10000, nstart = 10)$cluster # k-means
+# 
+#   ## hierarchical clustering
+# 
+#   som.dist <- dist(carve.som) # hierarchical, step 1
+#   som.cluster.h <- cutree(hclust(som.dist), k = k) # hierarchical, step 2
+# 
+#   ## capture outputs
+# 
+#   cluster.tries[[paste0('som.cluster.k.', k)]] <- som.cluster.k
+#   cluster.tries[[paste0('som.cluster.h.', k)]] <- som.cluster.h
+# }
+
+obs_density <- data.frame(node=som.model$unit.classif)%>%group_by(node)%>%summarise(count=n())
+# ggplot(obs_density,aes(x=count))+geom_histogram()+custom_theme
+
+#Want to find the average variance and number of models represented in each cluster
+clusters <- som.cluster.k
+ids <- som.model$unit.classif
+sample_clusters <- som.cluster.k[som.model$unit.classif]
+
+na.nodes <- which(c(1:gridsize^2)%in%unique(obs_density$node)==FALSE)
+som.cluster.k[na.nodes] <- NA
+
+all_vars <- c()
+for (i in 1:k){
+  curr_clust=i
+  
+  curr_models <- which(clusters==curr_clust)
+  
+  if (length(curr_models)>1){
+    curr_vars <- apply(metabolite_matrix[curr_models,],2,sd)%>%mean()
+    all_vars <- c(all_vars,curr_vars)
+  } else {
+    all_vars <- c(all_vars,0)
+  }
+}
+
+# var_df <- data.frame(clust_size=table(sample_clusters),mean_var=all_vars)
+# colnames(var_df) <- c("cluster","num_models","mean_var")
+
+# ggplot(var_df,aes(x=num_models,y=mean_var,color=cluster))+geom_point(size=5)+labs(color="Cluster",x="Number of models in cluster",y="Average variance in cluster")+scale_color_manual(values = c("#a0a052","#6c63d7","#a0b533","#c957ca","#5db855","#98459e","#d89d37","#7a93dd","#c9532a","#46aed7","#d6445a","#50b593","#d1438d","#4c7937","#c285de","#91682d","#625fa3","#dd8a68","#d883af","#a44d61"))
+
+```
+
+### SOM cluster analysis... done!
+
+```{r SOM analysis, echo=FALSE}
+#We also want to examine the recipes to find genomes where all or nearly all recipes are identical
+genome_IDs <- unique(rownames(metabolite_matrix))
+dupe_count <- 0
+dupe_IDs <- c()
+for (i in 1:length(genome_IDs)){
+  curr_id <- genome_IDs[i]
+  curr_indices <- which(rownames(metabolite_matrix) %in% curr_id)
+  sub_mat <- metabolite_matrix[curr_indices,]
+  dupe_check <- unique(sub_mat)
+  if (dim(dupe_check)[1]==1){
+    # print(paste("Dupe found in genome",curr_id))
+    dupe_IDs <- cbind(dupe_IDs,curr_id)
+    dupe_count <- dupe_count+1
+  }
+}
+print(paste("There were",dupe_count,"genomes with duplicate growth sensitivity vectors across all models generated for that genome."))
+
+#Determine the majority cluster to which each genome belongs
+majority_clust <- c()
+set.seed(123)
+tracker <- 0
+for (i in 1:length(genome_IDs)){
+  curr_id <- genome_IDs[i]
+  curr_indices <- which(rownames(metabolite_matrix) %in% curr_id)
+  curr_clust <- sample_clusters[curr_indices]%>%table()
+  
+  major <- which(curr_clust %in% max(curr_clust))%>%
+    names(curr_clust)[.]%>% 
+    as.numeric()
+  #There exists the possibility in some instances that there might be a perfect tie between two or more clusters so in this case we randomly draw the cluster to assign it to and record the instances where this occurs
+  if (length(major)==1){
+    majority_clust <- c(majority_clust,major)
+    tracker <- tracker+1
+  } else {
+    #Functionality to visualize the genomes with ties
+    print(paste(curr_id,"has",length(major),"SOM clusters with",max(curr_clust),"models each."))
+    #print(curr_clust)
+    
+    majority_clust <- c(majority_clust,sample(major,1))
+  }
+}
+cluster_df <- as_tibble(genome_IDs)%>%mutate(.,clusters=majority_clust)
+
+#We want to repeat this process for the majority SOM grid point which is more specific than SOM cluster
+majority_gridpoint <- c()
+set.seed(123)
+for (i in 1:length(genome_IDs)){
+  curr_id <- genome_IDs[i]
+  curr_indices <- which(rownames(metabolite_matrix) %in% curr_id)
+  curr_point <- ids[curr_indices]%>%table()
+  
+  major <- which(curr_point %in% max(curr_point))%>% names(curr_point)[.]%>% as.numeric()
+  #In the rare instance where an ensemble's models are perfectly split over two SOM nodes, we will randomly select the winning node to assign that genome to
+  if (length(major)==1){
+    majority_gridpoint <- c(majority_gridpoint,major)
+  } else {
+    #Functionality to visualize the genomes with ties
+    print(paste(curr_id,"has",length(major),"SOM grid points with",max(curr_point),"models each."))
+    #print(curr_clust)
+    
+    majority_gridpoint <- c(majority_gridpoint,sample(major,1))
+  }
+}
+gridpoint_df <- as_tibble(genome_IDs)%>%mutate(.,gridpoints=majority_gridpoint)
+gridpoint_table <- table(gridpoint_df$gridpoints)
+
+#We want to do a PCA directly on the data as a comparative method to the SOM clustering
+data_pca <- prcomp(metabolite_matrix)
+points <- data_pca$x%>%as_tibble()%>%mutate(.,clusters=sample_clusters)
+points$clusters <- as_factor(points$clusters)
+axes <- data_pca$rotation[,1:2]%>%as_tibble()%>%mutate(.,metab_classes=rownames(data_pca$rotation))
+
+pca_plot <- autoplot(data_pca,data=points,colour="clusters",loadings=TRUE,loadings.label=TRUE,loadings.label.size=5,loadings.color="darkred",loadings.label.color="black",loadings.label.repel=TRUE)+
+  labs(color="SOM Cluster")+
+  scale_color_manual(values=cluster_colors)+
+  theme_bw()+
+  custom_theme+
+  guides(color=guide_legend(override.aes=list(size=4.5)))
+
+#Explicitly label the PCA loadings to look nicer
+pca_plot$layers[[2]]$data <- pca_plot$layers[[2]]$data[c("Carboxylic Acid","Amino Acids/Derivatives","Carbohydrates/Derivatives","Nucleobases/Nucleosides/Nucleotides/Derivatives","Peptides","B Vitamins"),]
+pca_plot$layers[[3]]$data <- pca_plot$layers[[3]]$data[c("Carboxylic Acid","Amino Acids/Derivatives","Carbohydrates/Derivatives","Nucleobases/Nucleosides/Nucleotides/Derivatives","Peptides","B Vitamins"),]
+
+#Now try reformulating the dataframe by metabolite and look at summary stats
+scaled_df <- as_tibble(metabolite_matrix)%>%
+  mutate(.,clusters=sample_clusters,genomes=rownames(metabolite_matrix))%>%
+  pivot_longer(-c(clusters,genomes),names_to="metab_class",values_to="scaled_value")
+
+scaled_df$clusters <- as_factor(scaled_df$clusters)
+
+summarize_df <- scaled_df%>%
+  group_by(clusters,metab_class)%>%
+  summarize(mean=mean(scaled_value,na.rm=TRUE),
+            std=sd(scaled_value,na.rm=TRUE))
+
+#We want to compute several metrics on the data itself to determine need for thresholding and excluding certain metabolites
+
+#First we want to look at the average coefficients of variance per metabolite per genome (one value per genome)
+#Use the genome IDs to subset all models for a genome
+genome_IDs <- unique(rownames(metabolite_matrix))
+average_coeffsvar <- vector(mode="integer",length=length(genome_IDs))
+for (i in 1:length(genome_IDs)){
+  curr_rows <- which(rownames(metabolite_matrix)==genome_IDs[i])
+  curr_matrix <- metabolite_matrix[curr_rows,]
+  #Need to remove metabolites that aren't present in any recipes
+  zerocols <- which(colSums(curr_matrix)==0)
+  curr_matrix <- curr_matrix[,-zerocols]
+  
+  #Now compute the coefficient of variance (mean/sd), need to also exclude zeros here in each column
+  curr_means <- apply(curr_matrix,2,function(v) v[which(v>0)]%>%mean())
+  curr_sds <- apply(curr_matrix,2,function(v) v[which(v>0)]%>%sd())
+  #Any NA values reflect metabolites with only one non-zero flux so we will modify those to 0
+  curr_sds[which(is.na(curr_sds)==TRUE)] <- 0
+  
+  coeffs_var <- curr_sds/curr_means
+  average_coeffsvar[i] <- mean(coeffs_var)
+}
+
+#Convert to a dataframe and plot as a histogram
+coeffs_df <- as_tibble(average_coeffsvar)
+
+coeffs_var_plot <- ggplot(coeffs_df,aes(x=value))+
+  geom_histogram(color="blue",fill="white")+
+  labs(x="Average Coefficient of Variance",y="Number of Genomes")+
+  theme_bw()+
+  custom_theme
+
+#We want to look at the evenness of model distribution across the clusters to look for genomes to remove
+ids <- som.model$unit.classif
+sample_clusters <- som.cluster.k[som.model$unit.classif]
+counts_table <- vector(mode="integer",length=60)
+largest_group <- c()
+for (i in 1:length(genome_IDs)){
+  curr_rows <- which(rownames(metabolite_matrix)==genome_IDs[i])
+  curr_distr <- sample_clusters[curr_rows]%>%table()%>%unique()
+  counts_table[curr_distr] <- counts_table[curr_distr]+1
+  
+  largest_group <- c(largest_group,sort(curr_distr,decreasing=TRUE)[1])
+}
+evenness_df <- as_tibble(counts_table)
+
+evenness_plot <- ggplot(evenness_df,aes(x=c(1:60),y=value))+
+  geom_point(size=4)+
+  labs(x="Number of replicates in cluster",y="Number of Genomes")+
+  theme_bw()+custom_theme
+
+# #We also want to identify for different levels of K how much genome replicates are being split into multiple nodes
+sizes <- c(2:20)
+# genome_IDs <- unique(file_headers$model_name)
+consensus <- matrix(data=0,nrow=length(sizes),ncol=1)
+breadth <- matrix(data=0,nrow=length(sizes),ncol=1)
+evenness <- matrix(data=0,nrow=length(sizes),ncol=1)
+for (i in 1:length(sizes)){
+  curr_size=sizes[i]
+  curr.sc <- kmeans(carve.som, centers = curr_size, iter.max = 10000, nstart = 10)$cluster
+clusters <- som.cluster.k
+ids <- som.model$unit.classif
+tmp_sample_clusters <- curr.sc[som.model$unit.classif]
+
+  tmp.cons <- matrix(data=0,nrow=length(genome_IDs),ncol=1)
+  tmp.breadth <- matrix(data=0,nrow=length(genome_IDs),ncol=1)
+  tmp.evenness <- matrix(data=0,nrow=length(genome_IDs),ncol=1)
+  for (j in 1:length(genome_IDs)){
+    curr_genome <- genome_IDs[j]
+    #curr.cons <- (which(file_headers$model_name %in% curr_genome)%>%sample_clusters[.]%>%table()%>%max())/60
+    #curr.breadth <- (which(file_headers$model_name %in% curr_genome)%>%sample_clusters[.]%>%unique()%>%length())/60
+    curr_cluster <- which(rownames(metabolite_matrix) %in% curr_genome)%>%tmp_sample_clusters[.]
+    curr.cons <- (curr_cluster%>%table()%>%max())/60
+    curr.breadth <- (curr_cluster%>%unique()%>%length())/60
+    if (length(table(curr_cluster))==1){
+      curr.evenness <- 1
+    } else {
+      curr.evenness <- (max(table(curr_cluster))-min(table(curr_cluster)))/60
+    }
+
+    tmp.cons[j] <- curr.cons
+    tmp.breadth[j] <- curr.breadth
+    tmp.evenness[j] <- curr.evenness
+  }
+  consensus[i] <- mean(tmp.cons)
+  breadth[i] <- mean(tmp.breadth)
+  evenness[i] <- mean(tmp.evenness)
+}
+consensus_df <- cbind(sizes,consensus,breadth,evenness)%>%as.data.frame()
+colnames(consensus_df) <- c("Cluster Size","Consensus","Breadth","Evenness")
+consensus_df <- consensus_df%>%pivot_longer(-c(`Cluster Size`),names_to="Metric",values_to="Value")
+
+SOM_metrics_plot <- ggplot(consensus_df,aes(x=`Cluster Size`,y=Value,color=Metric))+geom_line()+ylim(0,1)+theme_bw()+custom_theme
+
+
+```
+
+### Tree generation... done!
+```{r Big Tree, echo=FALSE}
+source("Codes/phylo_code.R")
+
+# pull in data
+
+# tree <- read.tree("Data/source-genomes-GToTree_Output.tre")
+raw_tree <- read.iqtree("Data/bac-only-UFboot-tree.treefile")
+
+#Make some modifications to the tree file here so we can look at bootstrap support, etc.
+raw_tree <- raw_tree%>%
+  mutate(support=case_when(UFboot>=95 ~ 1, 
+                           UFboot<95 ~ 0, .default=1))
+tree <- as.phylo(raw_tree)
+
+uf_boot <- raw_tree@data$UFboot
+support <- case_when(uf_boot>=95 ~ 1, 
+                     uf_boot<95 ~ 0, .default=1)
+
+tree$support <- support
+
+
+phylo <- read.csv("Data/derep_all-GTDB-phylo_r214.tsv",sep="\t",header=TRUE)
+
+#Load the phylogeny and remove the Archaea
+split_phylo <- phylo%>%mutate(GTDB.Taxonomy=gsub("[a-z]__","",GTDB.Taxonomy))%>%separate(.,GTDB.Taxonomy,sep=";",into=c("domain","phylum","class","order","family","genus","species"))%>%filter(domain!="Archaea")
+
+
+# pull out top 15 taxonomic groups
+
+groups <- split_phylo%>% group_by(order)%>%
+  summarise(count = n())%>% arrange(desc(count))
+
+
+groups$type <- "Other"
+groups$type[1:15] <- groups$order[1:15]
+
+
+#Read in the reference genome phylogeny and quality so we have access to that information if needed
+ref_phylo <- read.csv("Data/ref_genomes.csv",sep="\t",header=TRUE)
+ref.quality <- read_csv("Data/ref-quality-data.csv")
+
+ref_phylo <- ref_phylo%>%mutate(user_genome=gsub(".[0-9]_.*[0-9a-zA-Z_]","",user_genome))
+
+all.ref.info <- full_join(ref_phylo,ref.quality,by=join_by("user_genome"=="Genome"))
+split.ref.info <- all.ref.info%>%mutate(classification=gsub("[a-z]__","",classification))%>%separate(.,classification,sep=";",into=c("domain","phylum","class","order","family","genus","species"))
+
+split_ref_phylo <- ref_phylo%>%mutate(classification=gsub("[a-z]__","",classification))%>%separate(.,classification,sep=";",into=c("domain","phylum","class","order","family","genus","species"))
+
+#Uncomment these lines if you want to add the reference genome orders to the tree
+# ref_orders <- split_ref_phylo%>%filter(order!="")%>%reframe(unique(order))%>%as.matrix()%>%as.vector()
+# ref_match <- match(ref_orders,groups$order)
+# ref_match <- ref_match[is.na(ref_match)==FALSE]
+# groups$type[ref_match] <- groups$order[ref_match]
+
+split_phylo$group <- groups$type[match(split_phylo$order,groups$order)]
+
+quality_data <- read.csv("Data/rxn_info.csv")
+
+som_data <- cbind(genome_IDs,majority_clust)%>%as.data.frame()
+colnames(som_data) <- c("value","clusters")
+
+# tree_wide <- as.tibble(tree)
+# tree_wide$group <- split_phylo$group[match(tree_wide$label,split_phylo$prokka_id)]
+# 
+# tree_wide <- as.data.frame(tree_wide)
+
+taxa_df <- data.frame(taxonomy = split_phylo$group[match(tree$tip.label, split_phylo$prokka_id)])
+rownames(taxa_df) <- tree$tip.label
+taxa_df$ref <- NA
+taxa_df$ref[grep("GCF",rownames(taxa_df))] <- "Reference Genomes"
+taxa_df$taxonomy[which(taxa_df$taxonomy == "Other")] <- NA
+ref_df <- data.frame(ref = taxa_df[,-1])
+taxa_df$ref <- NULL
+rownames(ref_df) <- tree$tip.label
+
+
+taxa_df$taxonomy <- factor(taxa_df$taxonomy)
+
+labels <- data.frame(label = unique(taxa_df$taxonomy))%>% arrange(label)
+
+# convert back with as.phylo()
+# t_plot <- ggtree(tree, aes(x,y,color=as.factor(support)), layout = "circular", lwd = 0.5, branch.length = "none")+scale_color_manual(values=c("orange","black")) + new_scale_color()
+t_plot <- ggtree(tree, aes(x,y), layout = "circular", lwd = 0.05, branch.length = "none")
+
+#Reorder the phylogeny colors to match downstream plots (currently doing this manually)
+tree_colors <- phylo_colors[c(4,2,6,5,10,12,15,9,8,1,11,13,14,3,7)]
+
+# t_plot <- rotate_tree(t_plot, 100)
+
+out_tree <- gheatmap_hidden(t_plot, taxa_df, offset=-0.5, width=.05, colnames = FALSE) +
+  scale_fill_manual(values = tree_colors, 
+                     na.translate = FALSE) + 
+  scale_color_manual(values =tree_colors, 
+                    na.translate = FALSE) + labs(fill = "Taxonomy", color = "Taxonomy") + theme(legend.position="none")
+
+# align text to taxonomy
+tree_dat <- out_tree$data%>% filter(isTip == TRUE)
+
+tax_labs <- data.frame(id = tree$tip.label)
+tax_labs$labs <- split_phylo$group[match(tax_labs$id,split_phylo$prokka_id)]
+tax_labs$pos <- tree_dat$y[match(tax_labs$id, tree_dat$label)]
+
+tax_sum <- tax_labs%>% group_by(labs)%>%
+  summarise(pos = mean(pos))%>% filter(!is.na(labs), labs != "Other")
+
+tax_sum$angles = (tax_sum$pos/max(tax_labs$pos)) * 360
+
+tax_sum$hshift <- 1
+
+tax_sum$nchar <- nchar(tax_sum$labs)
+tax_sum$nchar[which(tax_sum$angles < 90 | tax_sum$angles > 270)] <- NA
+tax_sum$hshift[which(tax_sum$angles > 90 & tax_sum$angles < 270)] <- 0 
+tax_sum$angles[which(tax_sum$angles > 90 & tax_sum$angles < 270)] <- tax_sum$angles[which(tax_sum$angles > 90 & tax_sum$angles < 270)] + 180
+tax_sum$labs <- factor(tax_sum$labs)
+
+dist_max <- max(out_tree$data$x)
+
+out_tree <- out_tree + geom_text(data = tax_sum, x = dist_max-5,
+                     aes(y = pos, label = labs, angle = angles, hjust = hshift, color = labs),
+                     vjust = 0.5, size = 4, fontface = "bold", show.legend = FALSE)
+
+t_plot2 <- out_tree + new_scale_color() + new_scale_fill()
+
+out_tree2 <- gheatmap2(t_plot2, ref_df, offset= 4, width=0.1, colnames = FALSE) +
+  scale_fill_manual(values = c("red"), 
+                    na.translate = FALSE) + 
+  scale_color_manual(values = c("red"), 
+                     na.translate = FALSE) + labs(fill = "", color = "") 
+
+t_plot3 <- out_tree2 + new_scale_color() + new_scale_fill()
+
+# quality data
+quality_data$prokka_id <- paste0(quality_data$X,"-prokka")
+qual_df <- data.frame(Quality = quality_data$mean_freq[match(tree$tip.label, quality_data$prokka_id)])
+rownames(qual_df) <- tree$tip.label
+
+out_tree3 <- gheatmap2(t_plot3, qual_df, offset= 14, width=0.1, colnames = FALSE) +
+  scale_fill_gradient(low="gray99",high="black",na.value = "white", breaks = c(0,0.25,0.5,0.75,1)) + 
+  scale_color_gradient(low="gray99",high="black",na.value = "white", breaks = c(0,0.25,0.5,0.75,1)) +
+  # guides(color = guide_colorbar(title.hjust = 0.5, title.position = "top",
+  #                               frame.colour = "black", ticks.colour = "black", barwidth = 10),
+  #        fill = guide_colorbar(title.hjust = 0.5, title.position = "top",
+  #                              frame.colour = "black", ticks.colour = "black",barwidth = 10)) +
+  labs(fill = "Consensus", color = "Consensus")
+
+t_plot4 <- out_tree3 + new_scale_color() + new_scale_fill()
+
+# now soms
+
+som_data$prokka_id <- paste0(som_data$value,"-prokka")
+som_df <- data.frame(som = som_data$clusters[match(tree$tip.label, som_data$prokka_id)])
+rownames(som_df) <- tree$tip.label
+som_df$som <- factor(som_df$som, levels = (1:num_clusters))
+
+out_tree4 <- gheatmap2(t_plot4, som_df, offset= 24, width=0.1, colnames = FALSE) +
+  scale_fill_manual(values = cluster_colors,na.translate = FALSE) + 
+  scale_color_manual(values = cluster_colors, na.translate = FALSE) + labs(fill = "SOM Cluster", color = "SOM Cluster") +
+  theme(legend.text = element_text(size = 12),
+        legend.title = element_text(size = 12),
+        legend.direction = "horizontal",
+        legend.position = "bottom")
+
+
+```
+
+### Metabolite pattern analysis... done!
+
+```{r Metabolite Classes, echo=FALSE}
+#Scale the data by rows
+all.piv.df <- as_tibble(metabolite_matrix)%>%mutate(.,clusters=sample_clusters,genomes=rownames(metabolite_matrix))%>%pivot_longer(-c(clusters,genomes),names_to="metab_class",values_to="scaled_flux")
+all.piv.df$clusters <- as_factor(all.piv.df$clusters)
+
+scaled.piv.df <- all.piv.df%>%group_by(clusters,metab_class)
+
+scaled.piv.df <- scaled.piv.df%>% group_by(clusters)%>% mutate(min = min(scaled_flux),max = max(scaled_flux),polar_size = (scaled_flux)/(abs(max)+abs(min)))
+
+scaled.piv.df$metabolite <- factor(scaled.piv.df$metab_class, levels = unique(scaled.piv.df$metab_class))
+
+#Want to create plots of the SOM grids using the prototype values
+#Create the prototypes dataframe, then modify it down to metabolite classes by averaging
+classifiers_df <- as.data.frame(som.model$codes[[1]])
+
+classifiers_df$nodes <- as.numeric(gsub("V","", rownames(classifiers_df)))
+classifiers_df$cluster <- som.cluster.k
+classifiers_df$column_names <- rep(c(1:gridsize,seq(0.5,gridsize-0.5, by = 1)), times = gridsize)[1:gridsize^2]
+classifiers_df$row_names <- rep(seq(0.5,0.5*gridsize, by = 0.5), each = gridsize)
+
+pivot_df <- classifiers_df%>% pivot_longer(-c(nodes,cluster,row_names,column_names), names_to = "metab_class", values_to = "scaled_flux")
+
+pivot_df <- pivot_df%>% group_by(nodes)%>% mutate(min = min(scaled_flux),
+                                                    max = max(scaled_flux),
+                                                    polar_size = (scaled_flux)/(abs(max)+abs(min)))
+
+pivot_df$metabolite <- factor(pivot_df$metab_class, levels = unique(pivot_df$metab_class))
+
+#Manually adjust a couple of the long named metabolite classes for better plots
+scaled.piv.df <- scaled.piv.df%>%mutate(metab_class=case_when(
+  metab_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
+  metab_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
+  .default=metab_class))
+
+#Plot density ridges of the SOM prototypes per cluster
+som.proto.dist_plot <- ggplot(data=scaled.piv.df,aes(x=scaled_flux,y=as.factor(clusters),fill=as.factor(clusters)))+
+  geom_density_ridges(scale=0.9)+
+  facet_wrap(~metab_class)+
+  coord_cartesian(xlim=c(-0.05,1.05))+
+  scale_fill_manual(values=cluster_colors)+
+  scale_y_discrete(limits=rev)+
+  scale_x_continuous(breaks=c(0,0.25,0.5,0.75,1),labels=c("0","0.25","0.5","0.75","1"))+
+  theme(legend.position="none")+
+  labs(x="Growth Sensitivity",y="Cluster")+
+  custom_theme
+
+plot_df = pivot_df%>%
+  nest(data=-nodes)%>%
+  mutate(plot = map2(data, nodes,
+                     ~ ggplot(.x) + theme_void() +
+                       aes(x = metab_class, y = scaled_flux, fill = metab_class) +
+                       geom_bar(stat = "identity", show.legend = FALSE, width = 1) +
+                       coord_polar() +
+                       scale_fill_manual(values = c("#ce4d3e",
+                                                    "#66b045",
+                                                    "#b256c2",
+                                                    "#9a963f",
+                                                    "#6569c8",
+                                                    "#c88441",
+                                                    "#5c9cd2",
+                                                    "#d14788",
+                                                    "#4fa67c",
+                                                    "#bf82c1",
+                                                    "#bb6271"))))
+
+plot_df$column_names <- rep(c(1:gridsize,seq(0.5,gridsize-0.5, by = 1)), times = gridsize)[1:gridsize^2]
+plot_df$row_names <- rep(seq(0.5,0.5*gridsize, by = 0.5), each = gridsize)
+
+plot_annotations = plot_df%>% 
+  mutate(annotation = pmap(list(column_names, row_names, plot),
+                           ~ annotation_custom(ggplotGrob(..3),
+                                               xmin = ..1-0.525, xmax = ..1+0.525,
+                                               ymin = ..2-0.525, ymax = ..2+0.525)))%>%
+  pull(annotation)
+
+
+grid_plot <- ggplot() + 
+  geom_point(data = classifiers_df, aes(x = column_names, y = row_names, color = as.factor(cluster)),
+             fill = "white", size = 30, pch = 21, stroke = 4) +
+  geom_col(data = pivot_df,
+           aes(0,0, fill = metab_class)) +
+  plot_annotations + coord_equal() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.key = element_blank(),
+        legend.position = "bottom",
+        legend.box = "horizontal",
+        plot.margin = ggplot2::margin(5,5,5,5)) + 
+  labs(color="Cluster",fill = "Metabolite Class") + 
+  guides(fill = guide_legend(ncol = 2, title.position = "top", title.hjust = 0.5)) +
+  scale_fill_manual(values = c("#ce4d3e",
+                               "#66b045",
+                               "#b256c2",
+                               "#9a963f",
+                               "#6569c8",
+                               "#c88441",
+                               "#5c9cd2",
+                               "#d14788",
+                               "#4fa67c",
+                               "#bf82c1",
+                               "#bb6271")) +
+  scale_color_manual(values = c("#a0a052",
+                                "#6c63d7",
+                                "#a0b533",
+                                "#c957ca",
+                                "#5db855",
+                                "#98459e",
+                                "#d89d37",
+                                "#7a93dd",
+                                "#c9532a",
+                                "#46aed7",
+                                "#d6445a",
+                                "#50b593",
+                                "#d1438d",
+                                "#4c7937",
+                                "#c285de",
+                                "#91682d",
+                                "#625fa3",
+                                "#dd8a68",
+                                "#d883af",
+                                "#a44d61"))+
+  custom_theme
+
+som_grid_plot <- ggplot() + 
+  geom_point(data = classifiers_df, aes(x = column_names, y = row_names, fill=as.factor(cluster)), size = 18, pch = 21, stroke = 1)+
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.key = element_blank(),
+        legend.position = "bottom",
+        legend.box = "horizontal",
+        plot.margin = ggplot2::margin(5,5,5,5)) + 
+  labs(x="",y="",fill="Cluster") +
+  scale_fill_manual(values = c("#4bafd0",
+                               "#cb613f",
+                               "#7277cb",
+                               "#67b043",
+                               "#b85ebc",
+                               "#55a270",
+                               "#c8577b",
+                               "#ae9540"),
+                    na.value="gray80")+
+  custom_theme
+
+#Further plots based on the metabolite classes for all som grid points
+
+#Line to subset the data frame for only specific metabolite classes
+classes <- c("Peptides","Amino Acids/Derivatives","B Vitamins","Nucleobases/Nucleosides/Nucleotides/Derivatives","Carboxylic Acid","Carbohydrates/Derivatives")
+# pared_df <- all.metab.df%>%filter(metabolite_class%in%classes)
+
+#Create data frame for looking at cluster mean and sd values for all of the original data rather than with the SOM prototype values
+all.metab.df <- adjusted_dat%>%filter(metab_class=="Growth")%>%group_by(genome,model,X)%>%
+mutate(growth_req=case_when(averaged_flux/orig_flux<=1 ~ (2*(1-averaged_flux/orig_flux)),averaged_flux/orig_flux>1 ~ 0))%>%
+  reframe(growth_req=growth_req)
+colnames(all.metab.df) <- c("genome","model","metabolite_class","growth_req")
+
+all.metab.df <- left_join(all.metab.df,cluster_df,by=join_by(genome==value))
+
+#Add plot that shows just the values
+
+group.metab.df <- all.metab.df%>%group_by(clusters,metabolite_class)%>%summarise(means=mean(growth_req),sds=sd(growth_req))
+group.metab.df$clusters <- as.factor(group.metab.df$clusters)
+
+#Chunk of code to change names of metabolite classes to help with plotting
+# group.metab.df <- group.metab.df%>%mutate(metabolite_class=case_when(
+#   metabolite_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
+#   metabolite_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
+#   .default=metabolite_class
+# ))
+
+metab_order <- group.metab.df%>% group_by(metabolite_class)%>%
+  summarise(rank = mean(abs(means), na.rm = TRUE))%>% arrange(desc(rank))
+
+group.metab.df$metabolite_class <- factor(group.metab.df$metabolite_class,
+                                     levels = metab_order$metabolite_class)
+
+new_df <- group.metab.df%>% group_by(metabolite_class)%>%
+  mutate(scaled_flux = (((means+sds) - min(means-sds))/(max(means+sds)-min(means-sds))))
+
+new_df$metabolite_class <- factor(new_df$metabolite_class,
+                                     levels = metab_order$metabolite_class)
+
+#Plot bar plots using all of the original data
+cluster_plot <- ggplot() +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_bar(data = group.metab.df, aes(y = means, x = clusters, fill = clusters),
+           stat = "identity") +
+  geom_errorbar(data = group.metab.df, aes(x = clusters,ymin = means-sds, ymax = means+sds),
+                width = 0.2) +
+  scale_fill_manual(values=cluster_colors)+
+  facet_wrap(vars(metabolite_class)) +
+  labs(x = "", y= "Growth Sensitivity", fill = "Cluster") +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.text = element_text(size = 18),
+        axis.title = element_text(size =18),
+        strip.text = element_text(size = 18),
+        legend.text = element_text(size = 18),
+        legend.title = element_text(size = 18),
+        strip.background = element_blank(),
+        legend.direction = "horizontal",
+        legend.position ="bottom",
+        panel.grid.major.y = element_line(color = "grey90", linewidth = 0.25)) +
+  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5, nrow = 1))
+
+
+all.dat.clust.plot <- ggplot() +
+  geom_hline(yintercept = 0, lty = 2) +
+  geom_bar(data = group.metab.df, aes(y = means, x = clusters, fill = clusters),
+           stat = "identity") +
+  geom_errorbar(data = group.metab.df, aes(x = clusters,ymin = means-sds, ymax = means+sds),
+                width = 0.2) +
+  facet_wrap(vars(metabolite_class),scales="free_y") +
+  labs(x = "", y= "Growth Limitation", fill = "Cluster") +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.text = element_text(size = 16),
+        axis.title = element_text(size =16),
+        strip.text = element_text(size = 16),
+        legend.text = element_text(size = 16),
+        legend.title = element_text(size = 16),
+        strip.background = element_blank(),
+        legend.direction = "horizontal",
+        legend.position ="bottom",
+        panel.grid.major.y = element_line(color = "grey90", linewidth = 0.25)) +
+  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5, nrow = 1))
+
+sub_df <- new_df%>%filter(!metabolite_class%in%c("Alcohol","Amines/Amides","Ketones/Aldehydes","Organic Sulfur","Phospholipids/Fatty\nAcids/Triglycerides"))%>%mutate(metabolite_class=case_when(
+  metabolite_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
+  metabolite_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
+  .default=metabolite_class
+))
+sub_df <- sub_df%>%mutate(Group=case_when(clusters%in%c(1,3,7,8) ~ "slow", clusters == 2 ~ "fast", clusters%in%c(4,6) ~ "slow intermediate", clusters==5 ~ "fast intermediate"))
+sub_df$Group <- as_factor(sub_df$Group)
+
+flux_bubble_plot <- ggplot() +
+  geom_point(data=sub_df,aes(x=clusters,y=metabolite_class,color=Group),size=0.001)+
+  geom_vline(xintercept = factor(1:num_clusters), lty = 2, linewidth = 0.25) +
+  geom_point(data = sub_df, aes(x = clusters, y = metabolite_class, fill = means, size = scaled_flux),pch=21) +
+  scale_fill_viridis_c(option="plasma")+
+  scale_radius(range = c(5,25),limits = c(min(sub_df$means),1),breaks=c(min(sub_df$means),0.5,1),labels=c("0","0.5","1"),guide="legend") +
+  labs(x = "Cluster", fill = "Growth Sensitivity", size = "Relative Sensitivity") +
+  scale_color_manual(values=c("#619CFF","#F8766D","#00BA38","yellowgreen"))+
+  scale_y_discrete(limits=rev)+
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 20),
+        axis.text.x = element_text(face="bold",size=20,color=c("#619CFF","#F8766D","#619CFF","#00BA38","yellowgreen","#00BA38","#619CFF","#619CFF")),
+        axis.title.x = element_text(size = 20),
+        legend.text = element_text(size  =20),
+        legend.title = element_text(size  =20),
+        legend.position = "bottom",
+        legend.direction = "horizontal",
+        legend.key = element_blank()) +
+  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(3.5, "in"),
+                               ticks.colour = "black", frame.colour = "black", order=2), size=guide_legend(title.position="top",title.hjust=0.5, order=3), color=guide_legend(nrow=2, title.position="top", title.hjust=0.5, override.aes=list(size=7.5,pch=15), order=1))
+
+#We also want to try to make a version where we only display the average relative flux values for each 
+#Create a mean df from the classifiers df
+all_means <- c()
+for (i in 1:num_clusters){
+  curr_means <- filter(classifiers_df,cluster==i)%>%select(!c(nodes,cluster,row_names,column_names))%>%colMeans(.)
+  all_means <- rbind(all_means,curr_means)
+}
+mean_df <- as.data.frame(all_means,row.names = FALSE)
+
+mean_df$nodes <- c(1:num_clusters)
+mean_df$row_names <- rep(c(1:(num_clusters/2)),times=2)
+mean_df$column_names <- rep(c(1:2),each=num_clusters/2)
+mean_df$cluster <- c(1:num_clusters)
+
+#Optional block of code for if you want to threshold
+
+mean_df <- mean_df%>%select(.,c(nodes,cluster,row_names,column_names),everything())
+
+pivot.mean_df <- mean_df%>% pivot_longer(-c(nodes, cluster, row_names, column_names),
+                                          names_to = "metab_class", values_to = "scaled_flux")%>%
+  group_by(nodes)%>% mutate(min = min(scaled_flux),
+                             max = max(scaled_flux),
+                             polar_size = (scaled_flux)/(abs(max)+abs(min)))
+
+pivot.mean_df$metabolite <- factor(pivot.mean_df$metab_class, levels = unique(pivot.mean_df$metab_class))
+
+plot_df = pivot.mean_df%>%
+  nest(data=-nodes)%>%
+  mutate(plot = map2(data, nodes,
+                     ~ ggplot(.x) + theme_void() +
+                       aes(x = metab_class, y = polar_size, fill = metab_class) +
+                       geom_bar(stat = "identity", show.legend = FALSE, width = 1) +
+                       coord_polar() +
+                       scale_fill_manual(values = c("#7663cf",
+                                                    "#8db43b",
+                                                    "#c851b1",
+                                                    "#55bc63",
+                                                    "#d54767",
+                                                    "#4fbeae",
+                                                    "#d15236",
+                                                    "#588dcc",
+                                                    "#d2a23a",
+                                                    "#a879bf",
+                                                    "#458149",
+                                                    "#bd6484",
+                                                    "#89883f",
+                                                    "#ba7648"))))
+
+plot_df$row_names <- rep(c(1:(num_clusters/2)),times=2)
+plot_df$column_names <- rep(c(1:2),each=num_clusters/2)
+
+plot_annotations = plot_df%>% 
+  mutate(annotation = pmap(list(column_names, row_names, plot),
+                           ~ annotation_custom(ggplotGrob(..3),
+                                               xmin = ..1-0.5, xmax = ..1+0.5,
+                                               ymin = ..2-0.5, ymax = ..2+0.5)))%>%
+  pull(annotation)
+
+
+flux_abund_plot <- ggplot() + 
+  geom_point(data = mean_df[,1:4], aes(x = column_names, y = row_names,color=as.factor(cluster)),
+             pch = 21, size = 50,stroke=2) +
+  geom_col(data = pivot.mean_df,
+           aes(0,0, fill = metab_class)) +
+  coord_cartesian(expand = 10) +
+  expand_limits(x=5,y=5) +
+  plot_annotations + coord_equal() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.box = "horizontal",
+        plot.margin = ggplot2::margin(5,5,5,5)) +
+  scale_fill_manual(values = c("#7663cf",
+                               "#8db43b",
+                               "#c851b1",
+                               "#55bc63",
+                               "#d54767",
+                               "#4fbeae",
+                               "#d15236",
+                               "#588dcc",
+                               "#d2a23a",
+                               "#a879bf",
+                               "#458149",
+                               "#bd6484",
+                               "#89883f",
+                               "#ba7648")) + labs(color="Cluster",fill = "Metabolite Class") + 
+  guides(fill = guide_legend(ncol = 2, title.position = "top", title.hjust = 0.5),color=guide_legend(title.position="top",override.aes=list(size=20)))
+
+```
+
+### Phylogenetic analysis... done!
+
+```{r phylogeny, echo=FALSE}
+#Code to examine the phylogeny of SOM clusters
+#Load phylogeny and match it to genome IDs
+phylo <- read.csv("Data/derep_all-GTDB-phylo_r214.tsv",sep="\t",header=TRUE)
+
+split_phylo <- phylo%>%mutate(GTDB.Taxonomy=gsub("[a-z]__","",GTDB.Taxonomy))%>%separate(.,GTDB.Taxonomy,sep=";",into=c("domain","phylum","class","order","family","genus","species"))%>%filter(domain!="Archaea")
+
+groups <- split_phylo%>%group_by(order)%>%summarise(count=n())%>%arrange(desc(count))
+
+groups$type <- "Other"
+groups$type[1:15] <- groups$order[1:15]
+split_phylo$Genome.prokka <- gsub("-prokka","",split_phylo$Genome.prokka)
+split_phylo$group <- groups$type[match(split_phylo$order,groups$order)]
+
+#Code to compare the mean consensus values across taxonomic orders
+new_phylo <- split_phylo
+merge_data <- merge(new_phylo,quality_data,by.x="Genome.prokka",by.y="X",no.dups=TRUE)%>%select(c(prokka_id,order,mean_freq,group))
+
+#Compute overall mean for each order
+order_mean_freq <- merge_data%>%group_by(group)%>%summarise(mean=mean(mean_freq))%>%arrange(desc(mean))
+
+#Compute percent of genomes in order above threshold
+thresh <- 0.8
+order_hq_frac <- merge_data%>%group_by(group)%>%summarise(high.qual.frac=sum(mean_freq>thresh)/length(mean_freq))%>%arrange(desc(high.qual.frac))
+
+#Isolate the correct subset of genomes and reduce the dataframe to match
+split_phylo_hq <- split_phylo[split_phylo$Genome.prokka %in% genome_IDs,]%>%select(Genome.prokka,group)
+
+#Regenerate a superClass object of the correct value K
+clusters <- som.cluster.k
+ids <- som.model$unit.classif
+sample_clusters <- som.cluster.k[som.model$unit.classif]
+
+#Use the majority clustering previously calculated to assign a cluster to each genome
+match_rows <- match(split_phylo_hq$Genome.prokka,genome_IDs)
+split_phylo_hq <- mutate(split_phylo_hq,cluster=majority_clust[match_rows])
+phylo_mat <- matrix(data=0,nrow=num_clusters,ncol=16)
+colnames(phylo_mat) <- unique(split_phylo_hq$group)
+for (i in 1:num_clusters){
+  curr_cluster <- split_phylo_hq%>%select(cluster,group)%>%filter(cluster==i)
+  curr_phylo <- table(curr_cluster$group)
+  phylo_cols <- match(names(curr_phylo),colnames(phylo_mat))
+  phylo_mat[i,phylo_cols] <- curr_phylo
+}
+phylo_df <- as.data.frame(phylo_mat,row.names = FALSE)%>%mutate(.,cluster=c(1:num_clusters))%>%select(cluster,everything())
+
+# ggplot(filter(phylo_df,cluster==1),aes(x="",y=value,fill=group))+
+#   geom_col(color="black")+
+#   geom_text(aes(x=1.35,label=value),position=position_stack(vjust=0.5))+
+#   coord_polar(theta="y")+
+#   theme_void()
+
+#Now we want to plot all the pie charts together
+phylo_df$nodes <- c(1:num_clusters)
+phylo_df$row_names <- rep(c(1:(num_clusters/2)),times=2)
+phylo_df$column_names <- rep(c(1:2),each=num_clusters/2)
+phylo_df$cluster <- c(1:num_clusters)
+
+#Optional block of code for if you want to threshold
+
+phylo_df <- phylo_df%>%select(.,c(nodes,cluster,row_names,column_names),everything())
+
+pivot_df <- phylo_df%>% pivot_longer(-c(nodes, cluster, row_names, column_names),
+                                   names_to = "Group", values_to = "Number of Genomes")%>%
+  group_by(nodes)
+
+pivot_df$Order <- factor(pivot_df$Group, levels = unique(pivot_df$Group))
+
+plot_df = pivot_df%>%
+  nest(data=-nodes)%>%
+  mutate(plot = map2(data, nodes,
+                     ~ ggplot(.x) + theme_void() +
+                       aes(x = "", y = `Number of Genomes`, fill = Order)+
+                       geom_col(color="black",show.legend=FALSE)+
+                         coord_polar(theta="y")+
+                       scale_fill_manual(values=c("#b8617c",
+                                                  "#63b750",
+                                                  "#895bc9",
+                                                  "#b2b53b",
+                                                  "#c84ca3",
+                                                  "#3d854f",
+                                                  "#d74164",
+                                                  "#54bf9f",
+                                                  "#cf5230",
+                                                  "#54acd8",
+                                                  "#d48e36",
+                                                  "#5f7ac7",
+                                                  "#6e772c",
+                                                  "#bf83c9",
+                                                  "#bca262",
+                                                  "#b7694b"))))
+
+pivot_df <- pivot_df%>% group_by(cluster)%>% mutate(perc = `Number of Genomes`/sum(`Number of Genomes`))
+
+order_df <- pivot_df%>% group_by(Order)%>% summarise(mean = mean(perc))%>%
+  arrange(mean)
+
+pivot_df$Order <- factor(pivot_df$Order, levels = order_df$Order)
+
+phylo_abund_plot <- ggplot(pivot_df, aes(x = as.factor(cluster), y = perc, fill = Order)) +
+  geom_bar(stat = "identity") + coord_cartesian(expand = FALSE) + labs(x = "Cluster", y = "Proportion")+
+  custom_theme+
+  scale_fill_manual(values = c("#b8617c",
+                               "#63b750",
+                               "#895bc9",
+                               "#b2b53b",
+                               "#c84ca3",
+                               "#3d854f",
+                               "#d74164",
+                               "#54bf9f",
+                               "#cf5230",
+                               "#54acd8",
+                               "#d48e36",
+                               "#5f7ac7",
+                               "#6e772c",
+                               "#bf83c9",
+                               "#bca262",
+                               "gray"))+
+  scale_y_continuous(breaks=c(0,0.2,0.4,0.6,0.8),labels=c("0","0.2","0.4","0.6","0.8"))+
+  theme(legend.position="bottom",axis.text.x=element_text(size=20,face="bold",color=c("#619CFF","#F8766D","#619CFF","#00BA38","yellowgreen","#00BA38","#619CFF","#619CFF")),legend.text=element_text(size=20),axis.title.x=element_text(size=20),axis.title.y=element_text(size=20),axis.text.y=element_text(size=20),legend.title=element_text(size=20))
+
+plot_df$row_names <- (rep(c(1:(num_clusters/2)),times=2)-1)*2+0.55
+plot_df$column_names <- (rep(c(1:2),each=num_clusters/2)-1)*2+0.25
+plot_df$cluster <- phylo_df$cluster
+plot_df <- select(plot_df,nodes,cluster,row_names,column_names,everything())
+
+plot_annotations = plot_df%>% 
+  mutate(annotation = pmap(list(column_names, row_names, plot),
+                           ~ annotation_custom(ggplotGrob(..3),
+                                               xmin = ..1-0.9, xmax = ..1+0.9,
+                                               ymin = ..2-0.9, ymax = ..2+0.9)))%>%
+  pull(annotation)
+
+
+phylo_grid_plot <- ggplot() +
+  geom_col(data = pivot_df,
+           aes(0,0, fill = Order))+
+  geom_point(data = plot_df[,1:4], aes(x = column_names, y = row_names,color=as.factor(cluster)),
+             pch = 21, size = 82.5,stroke=2)+
+  coord_cartesian(expand = 10) +
+  expand_limits(x=5,y=5) +
+  plot_annotations + coord_equal() +
+  theme(axis.title = element_blank(),
+        axis.text = element_blank(),
+        axis.line = element_blank(),
+        axis.ticks = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "bottom",
+        legend.box = "horizontal",
+        plot.margin = ggplot2::margin(5,5,5,5))+ 
+        labs(color="Cluster")+
+  guides(fill = guide_legend(ncol = 2, title.position = "top", title.hjust = 0.5),color=guide_legend(title.position="top",override.aes=list(size=20)))+
+  scale_fill_manual(values = c("#b8617c",
+                               "#63b750",
+                               "#895bc9",
+                               "#b2b53b",
+                               "#c84ca3",
+                               "#3d854f",
+                               "#d74164",
+                               "#54bf9f",
+                               "#cf5230",
+                               "#54acd8",
+                               "#d48e36",
+                               "#5f7ac7",
+                               "#6e772c",
+                               "#bf83c9",
+                               "#bca262",
+                               "gray")) 
+
+# print("Figure: ")
+# plot(phylo_grid_plot)
+
+#Try re-plotting this with one bar per phylogenetic order per cluster
+phylo_stacked_abund_plot <- ggplot(pivot_df, aes(y = Order, x = perc, fill = as.factor(cluster))) +
+  geom_bar(position="dodge",stat = "identity") + coord_cartesian(expand = FALSE) + labs(y = "Cluster", x = "Proportion", fill="Cluster")+
+  scale_fill_manual(values = c("#a0a052","#6c63d7","#a0b533","#c957ca","#5db855","#98459e","#d89d37","#7a93dd","#c9532a","#46aed7","#d6445a","#50b593","#d1438d","#4c7937","#c285de","#91682d","#625fa3","#dd8a68","#d883af","#a44d61"))
+
+
+#Now try re-plotting the same style chart but we want to compute a new metric -> relative abundance of orders in cluster compared to relative abundance of order in total dataset
+#Get the whole data order abundances
+fulldata_abundances <- table(split_phylo_hq$group)%>%as.data.frame()
+colnames(fulldata_abundances) <- c("Order","Abundance")
+fulldata_abundances <- mutate(fulldata_abundances,Abundance=Abundance/length(genome_IDs))
+
+#Now we want to compute the ratio between the within cluster abundances and full data abundances
+pivot_df$diff <- 0
+for (i in 1:length(fulldata_abundances$Order)){
+  pivot_df <- pivot_df%>%mutate(diff=ifelse(Order==fulldata_abundances$Order[i],(perc/fulldata_abundances$Abundance[i])-1,diff))
+}
+
+#Now plot
+phylo_rel_diff_plot <- ggplot(pivot_df, aes(y = as.factor(cluster), x = diff, fill = as.factor(cluster))) +
+  geom_bar(width=0.65,position="dodge",stat = "identity")+
+  expand_limits(x=c(min(pivot_df$diff-0.25),max(pivot_df$diff)+0.25)) +
+  scale_y_discrete(limits=rev)+
+  scale_fill_manual(values=cluster_colors)+
+  geom_vline(xintercept=0,lty=2) + 
+  scale_x_continuous(expand=expansion(mult=c(0,0.1))) + 
+  labs(y = "Cluster", x = "Difference from Full Data (% change rel abundance)", fill="Cluster")+
+  facet_wrap(~Order)+
+  theme_bw()+
+  custom_theme
+
+#We want to look at the bray-curtis dissimilarity of the taxonomic distributions within each cluster
+#We will look at the order level
+bray_phylo <- split_phylo%>%select(c(Genome.prokka,order))%>%filter(Genome.prokka%in%genome_IDs)%>%mutate(group=gsub("o__","",order))
+
+bray_phylo <- left_join(bray_phylo,cluster_df,by=join_by(Genome.prokka==value))
+
+phylo_piv <- bray_phylo%>%group_by(group,clusters)%>%summarise(count=n())%>%group_by(clusters)%>%mutate(sum=sum(count))%>%group_by(clusters,group)%>%mutate(prop=count/sum)
+
+phylo_piv <- phylo_piv%>%arrange(clusters)%>%select(-c(count,sum))%>%pivot_wider(names_from=clusters,values_from=prop,values_fill=0)%>%ungroup()
+phylo_bray <- phylo_piv%>%select(-group)%>%as.matrix()%>%t()
+
+bray <- vegdist(phylo_bray,method = "bray", upper = FALSE, diag = FALSE)
+bray <- as.matrix(bray)
+bray[lower.tri(bray,diag = TRUE)] <- NA
+bray <- as.data.frame(bray)
+bray$cluster1 <- rownames(bray)
+
+```
+
+### Growth estimate (dCUB) analysis... done!
+
+```{r Growth Data, echo=FALSE, fig.width=12, fig.height=12}
+#Plot a grid map with genomes as density, growth rates as a heatmap and colored borders by cluster
+
+asinh_trans = function(){
+  scales::trans_new("asinh",
+                    transform = asinh,
+                    inverse = sinh)
+
+}
+
+growth_dat <- read.csv("Data/growth_violin_data.csv")
+
+#Plot the growth rate distributions for each cluster (ideally add in statistical sig as well)
+growth_df <- cluster_df
+growth_df <- mutate(growth_df,matchrow=match(cluster_df$value,growth_dat$Genome,nomatch=0))
+replace_rows <- which(growth_df$matchrow>0)
+growth_df <- growth_df%>%filter(.,matchrow>0)%>%mutate(dCUB=growth_dat$dCUB[matchrow])%>%select(-c(matchrow))
+growth_df$clusters <- as.factor(growth_df$clusters)
+
+#Replicate PCA plot with the points colored by dCUB rather than by cluster
+points <- points%>%mutate(dCUB=rep(growth_df$dCUB,each=60))
+
+growth_pca_plot <- autoplot(data_pca,data=arrange(points,desc(dCUB)),size=4,colour="dCUB",loadings=TRUE,loadings.label=TRUE,loadings.label.size=6,loadings.color="darkred",loadings.label.color="black",loadings.label.repel=TRUE)+
+  labs(color="dCUB value")+
+  scale_fill_viridis_c(option="plasma", direction=-1, aesthetics=c("colour","fill"), alpha=0.6, limits=c(min(points$dCUB),-0.08), na.value = "gray60", breaks=c(-0.08,-0.30,-0.60,-0.90),labels=c("-0.08","-0.30","-0.60","-0.90"))+
+  theme_bw()+
+  custom_theme+
+  guides(fill=guide_legend(override.aes=list(size=4.5)))
+
+growth_pca_plot$layers[[2]]$data <- pca_plot$layers[[2]]$data[c("Carboxylic Acid","Amino Acids/Derivatives","Carbohydrates/Derivatives","Nucleobases/Nucleosides/Nucleotides/Derivatives","Peptides","B Vitamins"),]
+growth_pca_plot$layers[[3]]$data <- pca_plot$layers[[3]]$data[c("Carboxylic Acid","Amino Acids/Derivatives","Carbohydrates/Derivatives","Nucleobases/Nucleosides/Nucleotides/Derivatives","Peptides","B Vitamins"),]
+
+#Perform a bootstrapping analysis of the percentage of genomes below the -0.08 threshold for random groups of genomes compared to cluster genomes
+avg.clust.size <- cluster_df$clusters%>%table()%>%as.matrix()%>%mean()%>%round()
+num_bootstraps <- 10000
+perc.growth.mat <- c()
+for (i in 1:num_bootstraps){
+  curr_genomes <- sample(cluster_df$value,avg.clust.size)
+  
+  curr.growth.info <- growth_df%>%filter(value %in% curr_genomes)
+  perc.high.growth <- curr.growth.info%>%summarise(sum(dCUB<(-0.08))/n())%>%as.matrix()
+  perc.growth.mat <- c(perc.growth.mat,perc.high.growth)
+}
+perc.growth.df <- data_frame(avg_dCUB=perc.growth.mat)
+
+#Also create a dataframe of the dCUB percentages for the 8 real clusters
+clust.perc.df <- growth_df%>%group_by(clusters)%>%summarise(perc_high=sum(dCUB<(-0.08))/n())
+
+boot.growth.plot <- ggplot(data = perc.growth.df, aes(x = avg_dCUB))+
+  geom_histogram(aes(y = after_stat(density)), binwidth=0.01, fill = "grey75", color = "black")+
+  stat_function(fun = dnorm, args = list(mean = mean(perc.growth.df$avg_dCUB), sd = sd(perc.growth.df$avg_dCUB)), linewidth = 2)+
+  stat_function(fun = dnorm, args = list(mean = mean(perc.growth.df$avg_dCUB), sd = sd(perc.growth.df$avg_dCUB)), xlim = c(mean(perc.growth.df$avg_dCUB) + 2*sd(perc.growth.df$avg_dCUB), max(perc.growth.df$avg_dCUB)), geom = "area", alpha = 0.5, fill = "blue", linewidth = 2)+
+  stat_function(fun = dnorm, args = list(mean = mean(perc.growth.df$avg_dCUB), sd = sd(perc.growth.df$avg_dCUB)), xlim = c(min(perc.growth.df$avg_dCUB), mean(perc.growth.df$avg_dCUB) - 2*sd(perc.growth.df$avg_dCUB)), geom = "area", alpha = 0.5, fill = "blue", linewidth = 2)+
+  geom_vline(aes(xintercept = mean(avg_dCUB), color = "Bootstrap Mean"), lty = 1, linewidth = 2)+
+  scale_color_manual(name="Distribution Mean",values=c(`Bootstrap Mean`="orange"))+
+  new_scale_color()+
+  geom_vline(data=clust.perc.df,aes(xintercept = perc_high, color = clusters), lty = 2, linewidth = 2)+
+  scale_color_manual(name = "Clusters", values=cluster_colors)+
+  labs(x = "Proportion of genomes with dCUB < -0.08", y = "Density of Counts", title = "Proportion of high growth genomes for randomized cluster versus real cluster values")+
+  expand_limits(x=c(0.39,0.8))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5, size = 18), axis.title = element_text(size=16), axis.text = element_text(size=16), legend.title = element_text(size=16), legend.text = element_text(size=16))
+
+#Preliminary non-parametric test of distributions with Kruskal-Wallis
+kruskal.list <- list()
+for (i in 1:num_clusters){
+  kruskal.list[[i]] <- growth_df%>%filter(clusters==i)%>%select(dCUB)%>%as.matrix()
+}
+kruskal.out <- kruskal.test(kruskal.list)
+
+print("Results of non-parametric Kruskal-Wallis Test:")
+print(kruskal.out)
+
+#Kruskal-Wallis is good with extremely strong p-value, suggesting differences in dCUB distributions, and our data is skewed normal so we will proceed with paired tests using Tukey's HSD
+#Compute a tukey test on the samples grouped by cluster to see if any clusters are significantly different from one another
+model=lm(growth_df$dCUB ~ growth_df$clusters)
+ANOVA=aov(model)
+
+growth.tukey <- TukeyHSD(x=ANOVA,'growth_df$clusters',conf.level=0.95)
+Tukey.levels <- growth.tukey[["growth_df$clusters"]][,4]
+growth.Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
+growth.Tukey.labels$treatment <- as.numeric(rownames(growth.Tukey.labels))
+growth.Tukey.labels <- growth.Tukey.labels[order(growth.Tukey.labels$treatment),]
+numeric.labels <- match(growth.Tukey.labels[,1],unique(growth.Tukey.labels[,1]))
+
+growth_df <- growth_df%>%mutate(group=numeric.labels[clusters])
+
+#We'd also like to do a comparison between the flux and growth rates by cluster to see if differentiation among slow clusters could be flux driven
+avg_df <- group.metab.df%>%group_by(clusters)%>%summarise(flux_mean=mean(means))
+avg_df <- avg_df%>%mutate(.,growth_mean=growth_df%>%group_by(clusters)%>%summarise(mean=mean(dCUB))%>%select(mean)%>%as.matrix()%>%as.numeric())
+avg_df <- avg_df%>%mutate(tukey_groups=as.factor(numeric.labels))
+
+growth_violin_plot <- ggplot(growth_df,aes(x=as.factor(clusters),y=dCUB,color=as.factor(group)))+
+  geom_violin(width=1)+
+  stat_summary(fun="mean",geom="crossbar",color="black")+
+  labs(x="Clusters")+
+  scale_color_manual(name="Group",values=c("#619CFF","#F8766D","#00BA38","yellowgreen"),labels=unique(growth.Tukey.labels[,1]))+
+  geom_point()+
+  custom_theme+
+  theme_bw()+
+  theme(axis.text = element_text(size=12),
+        axis.title = element_text(size=14),
+        legend.title = element_text(size=14),
+        legend.text = element_text(size=12))
+
+pivot.avg_df <- avg_df%>%pivot_longer(-c(clusters,tukey_groups))
+
+flux_versus_growth_plot <- ggplot()+
+  geom_point(data=pivot.avg_df,aes(x=clusters,y=value,color=tukey_groups,shape=name),size=4)+
+  theme_bw()
+
+#Different formulation of fuill data phylogeny plot where we show a ranked abundance curve of phylogeny broken out by cluster, colored by growth Tukey groups
+per.clust.phylo.df <- pivot_df%>%mutate(tukey_group=growth.Tukey.labels$Letters[match(cluster,growth.Tukey.labels$treatment)])
+per.clust.levels <- per.clust.phylo.df%>%filter(cluster==1)%>%arrange(desc(perc))%>%ungroup()%>%select(Group)%>%as.matrix()%>%as.vector()
+
+per.clust.phylo.df <- per.clust.phylo.df%>%mutate(Group=factor(Group,levels=per.clust.levels))
+
+per.clust.phylo_plot <- ggplot(per.clust.phylo.df,aes(x=Group,y=perc,fill=as.factor(tukey_group)))+geom_bar(position="dodge",stat="identity")+facet_wrap(~cluster,nrow=2)+theme_bw()+theme(axis.text.x=element_text(angle=45,hjust=1),legend.position="left")+labs(x="Taxonomic Order",y="Relative Abundance",fill="Statistical Group")
+
+#Construct a dataframe of the per SOM grid point growth information
+df <- carve.som%>% as.data.frame()
+classifiers_df <- data.frame(nodes=rownames(df))%>%mutate(.,growth=0,`Number Genomes`=0)
+classifiers_df$`Number Genomes`[names(gridpoint_table)%>%as.numeric()] <- gridpoint_table
+for (i in 1:length(unique(gridpoint_df$gridpoints))){
+  curr_point <- unique(gridpoint_df$gridpoints)[i]
+  point_indices <- which(gridpoint_df$gridpoints %in% curr_point)
+  point_matches <- match(gridpoint_df$value[point_indices],growth_dat$Genome,nomatch=0)
+  point_matches <- which(point_matches>0)%>%point_matches[.]
+  if (length(point_matches)>1){
+    classifiers_df$growth[curr_point] <- mean(growth_dat$dCUB[point_matches])
+  } else if (length(point_matches)==1) {
+    classifiers_df$growth[curr_point] <- growth_dat$dCUB[point_matches]
+  }
+}
+
+#Change any zero entries to NA
+zero_loc <- which(classifiers_df$growth==0)
+classifiers_df$growth[zero_loc] <- NA
+
+classifiers_df$cluster <- clusters
+
+classifiers_df$row_names <- rep(1:gridsize,times = gridsize)
+classifiers_df$column_names <- rep(1:gridsize,each = gridsize)
+
+classifiers_df <- classifiers_df%>%select(.,c(nodes,cluster,row_names,column_names),everything())
+
+#Create a dataframe object that will draw the boxes around the cluster nodes
+cluster_squares_df <- data.frame(cluster=c(1:num_clusters))
+cluster_squares_df <- mutate(cluster_squares_df,xmin=0,xmax=0,ymin=0,ymax=0)
+for (i in 1:num_clusters){
+  curr_clust <- i
+  curr_points <- filter(classifiers_df,cluster==i)%>%select(row_names,column_names)
+  xmin=min(curr_points$column_names -0.4); xmax=max(curr_points$column_names +0.4); ymin=min(curr_points$row_names -0.4); ymax=max(curr_points$row_names +0.4)
+  cluster_squares_df[i,c("xmin","xmax","ymin","ymax")] <- c(xmin,xmax,ymin,ymax)
+}
+
+clust_df <- cbind(genome_IDs,majority_clust)%>%as.data.frame()
+colnames(clust_df) <- c("value","clusters")
+
+clust_matches <- match(adjusted_dat$genome,clust_df$value)
+adjusted_dat <- adjusted_dat%>%ungroup()%>%mutate(diff_flux=(averaged_flux-orig_flux),corrected_flux=correction*averaged_flux,corrected_diff_flux=(correction*(averaged_flux))-orig_flux,cluster=as.numeric(clust_df$clusters[clust_matches]))
+
+#Now incorporate mean sensitivity values
+all.sensitivity <- adjusted_dat%>%filter(metab_class=="Growth")%>%group_by(genome,model,X)%>%
+     mutate(growth_req=case_when(averaged_flux/orig_flux<=1 ~ (2*(1-averaged_flux/orig_flux)),averaged_flux/orig_flux>1 ~ 0))%>%
+     reframe(growth_req=mean(growth_req))
+
+#Format the growth data by cluster and removed metabolite class
+grow_df <- adjusted_dat%>%
+  filter(metab_class=="Growth")%>%group_by(genome,model,X)%>%
+  mutate(growth_req=case_when(averaged_flux/orig_flux<=1 ~ (2*(1-averaged_flux/orig_flux)),
+                              averaged_flux/orig_flux>1 ~ 0))%>%
+  reframe(growth_req=growth_req)%>%select(-model)
+
+colnames(grow_df) <- c("genome","metabolite_class","growth_req")
+
+clust_matches <- match(grow_df$genome,clust_df$value)
+grow_df <- grow_df%>%
+  ungroup()%>%
+  mutate(cluster=as.factor(as.numeric(clust_df$clusters[clust_matches])))
+
+#Summarise the average growth requirement by cluster and metabolite class to see which clusters are sensitive to what compounds in aggregate
+sum_grow <- grow_df%>%
+  group_by(cluster, metabolite_class)%>%
+  summarise(avg_grow_req = mean(growth_req, na.rm = TRUE)) 
+
+grow_order <- grow_df%>% 
+  group_by(metabolite_class)%>%
+  summarise(grow = mean(growth_req))%>% 
+  arrange(desc(grow))
+
+sum_grow$cluster <- factor(sum_grow$cluster)
+sum_grow$metabolite_class <- factor(sum_grow$metabolite_class, levels = grow_order$metabolite_class)
+
+out_grow <- ggplot(sum_grow, aes(y = metabolite_class, x = avg_grow_req, fill = cluster)) +
+  geom_bar(stat= "identity", position = "dodge") + scale_x_continuous(expand = c(0,0), limits = c(0,1)) +
+  labs(x = "Growth Sensitivity", y= "", fill = "SOM Cluster") + 
+  theme(legend.position = c(0.97,0.97),
+        legend.justification = c(1,1),
+        legend.title = element_text(size = 12, angle = 90),
+        legend.text = element_text(size =12),
+        axis.title = element_text(size = 12),
+        axis.text = element_text(size = 12),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        legend.background = element_rect(fill = "white", color = "black")) +
+  guides(fill = guide_legend(title.position = "left", title.hjust = 0.5)) +
+  geom_hline(yintercept = seq(1.5,11.5), lty = 2, lwd = 0.25) + ggtitle("A")
+
+sum_grow <- sum_grow%>% group_by(metabolite_class)%>%
+  mutate(scaled_grow = ((avg_grow_req-min(avg_grow_req))/(max(avg_grow_req)-min(avg_grow_req)))) 
+#Raw plot of the growth sensitivity on [0,1] scale for all compound classes
+growth_dep_plot <- ggplot(sum_grow, aes(x = cluster, y = metabolite_class, size = scaled_grow, fill = avg_grow_req)) + 
+  geom_point(pch = 21) + scale_size_continuous(guide = "none", range = c(2,10)) +
+  scale_fill_viridis_c() +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 12),
+        legend.text = element_text(size  =12),
+        legend.title = element_text(size  =12),
+        legend.position = "bottom",
+        legend.direction = "horizontal") +
+  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(3.5, "in"),
+                               ticks.colour = "black", frame.colour = "black")) +
+  labs(x = "Cluster", fill = "Average Growth Sensitivity")
+
+# compare plot
+piv.mean_df <- mean_df%>% select(-c(nodes,row_names,column_names))%>% pivot_longer(-cluster, names_to = "metabolite_class", values_to = "flux")
+piv.mean_df$cluster <- factor(piv.mean_df$cluster)
+comb_df <- full_join(sum_grow, piv.mean_df)
+
+# plot regression lines
+flux_versus_dep_plot <- ggplot(comb_df, aes(x = flux, y = avg_grow_req, color = cluster)) +
+  geom_point(size = 4, alpha = 0.75) + facet_wrap(~metabolite_class, scales = "free_x") +
+  labs(color = "Metabolite Class", x = "Growth Sensitivity", y = "Growth Sensitivity") +
+  theme(panel.background = element_blank(), panel.border = element_rect(fill = NA, color = "black"),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10),
+        legend.key = element_blank(),
+        legend.position = "bottom",
+        legend.direction = "horizontal") + 
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5, nrow = 1))
+
+#New version of bubble plot that tries to combine information from several plots. Want to try the metabolite dependence values as color and mean scaled fluxes as size
+sum_grow$mean_flux <- new_df%>%ungroup%>%filter(metabolite_class%in%unique(sum_grow$metabolite_class))%>%select(means)%>%as.matrix()%>%as.numeric()
+sum_grow$scaled_flux <- new_df%>%ungroup%>%filter(metabolite_class%in%unique(sum_grow$metabolite_class))%>%select(scaled_flux)%>%as.matrix()%>%as.numeric()
+
+growth_dep_flux.size_plot <- ggplot(sum_grow, aes(x = cluster, y = metabolite_class, size = scaled_flux, fill = avg_grow_req)) + 
+  geom_point(pch = 21) + scale_size_continuous(range = c(0.01,10),limits=c(0,1)) +
+  scale_fill_viridis_c() +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 12),
+        axis.title.x = element_text(size = 12),
+        legend.text = element_text(size  =12),
+        legend.title = element_text(size  =12),
+        legend.position = "bottom",
+        legend.direction = "horizontal") +
+  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(3.5, "in"),
+                               ticks.colour = "black", frame.colour = "black"),size=guide_legend(title.position="top",title.hjust=0.5)) +
+  labs(x = "Cluster", fill = "Average Growth Sensitivity",size="Relative Sensitivity")
+
+#Also want to try plotting metabolite dependence in a few different arrangements, by total dependence and by growth (low to high)
+#Match up the genomes from the grow_df to the phylo df
+match_grow <- match(grow_df$genome,split_phylo_hq$Genome.prokka)
+grow_df$group <- split_phylo_hq$group[match_grow]
+
+#Plot the average growth sensitivity by top 15 orders
+taxa.grow_df <- grow_df%>%group_by(group)%>%filter(group!="Other")%>%summarise(perc=sum(growth_req>=0.8)/n())%>%arrange(desc(perc))
+taxa.grow_df$group <- factor(taxa.grow_df$group,levels=taxa.grow_df$group)
+
+colors <- phylo_colors[match(levels(taxa.grow_df$group),levels(pivot_df$Order))]
+
+phylo.high.sens.plot <- ggplot(taxa.grow_df,aes(x=group,y=perc,fill=group))+
+  geom_bar(stat="identity")+
+  geom_hline(yintercept=0,lty=2)+
+  labs(x="",y="Proportion of Genomes")+
+  scale_fill_manual(values=colors)+
+  theme_bw()+
+  custom_theme+
+  theme(axis.text.x=element_text(hjust=1,angle=45),legend.position="none")
+
+sum.taxa_df <- grow_df%>%group_by(metabolite_class,group)%>%summarise(avg_grow_req=mean(growth_req,na.rm=TRUE))
+
+taxa.grow_order <- grow_df%>% group_by(group)%>%
+  summarise(grow = mean(growth_req))%>% arrange(desc(grow))
+
+sum.taxa_df$metabolite_class <- factor(sum.taxa_df$metabolite_class); sum.taxa_df$group <- factor(sum.taxa_df$group,levels=taxa.grow_order$group)
+
+sum.taxa_df <- sum.taxa_df%>% group_by(group)%>%
+  mutate(scaled_grow = ((avg_grow_req-min(avg_grow_req))/(max(avg_grow_req)-min(avg_grow_req)))) 
+
+growth_dep_by.phylo_plot <- ggplot(sum.taxa_df, aes(x = group, y = metabolite_class, size = scaled_grow, fill = avg_grow_req)) + 
+  geom_point(pch = 21) + scale_size_continuous(range = c(0.01,10),limits=c(0,1)) +
+  scale_fill_viridis_c() +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.title.y = element_blank(),
+        axis.text = element_text(size = 10),
+        axis.text.x=element_text(angle=45,hjust=1),
+        axis.title.x = element_text(size = 12),
+        legend.text = element_text(size  =12),
+        legend.title = element_text(size  =12),
+        legend.position = "bottom",
+        legend.direction = "horizontal") +
+  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(3.5, "in"),
+                               ticks.colour = "black", frame.colour = "black"),size=guide_legend(title.position="top",title.hjust=0.5)) +
+  labs(x = "Order", fill = "Average Growth Sensitivity",size="Relative Sensitivity")
+
+```
+
+### Comparison to Matti's data... done!
+
+```{r Matti Models, echo=FALSE}
+matti.quality <- read_csv("Data/matti-quality-data.csv")
+
+hq_genomes<-matti.quality%>%
+  filter(Consensus>=0.8)%>%
+  select(Genome)%>%
+  as.matrix()
+
+#We want to try to directly compare the predictions by CarveMe on matti's models to his experimentally validated growth rates on substrates
+raw_growth_file <- read.csv("Data/Matti_growth-measurements.csv")
+cols <- colnames(raw_growth_file)
+
+#Manually slicing dataset for now but could use cols var + keywords
+sugar_growth_info <- raw_growth_file[,c(11:38)]; colnames(sugar_growth_info) <- sugar_growth_info[1,]
+sugar_growth_info <- sugar_growth_info[-1,]
+acid_growth_info <- raw_growth_file[,c(39:81)]
+colnames(acid_growth_info) <- acid_growth_info[1,]
+acid_growth_info <- acid_growth_info[-1,]
+
+#Create a heatmap of growth/no growth on sugar + acid compounds as well as heatmap of growth rates
+all_growth_info <- cbind(sugar_growth_info,acid_growth_info)%>%as.data.frame()
+matti.metab.ids <- read.csv("Data/matti_lab_metabolite_ids.csv")
+metab_names <- matti.metab.ids$X%>%as.matrix()
+
+# piv.binary_df <- binary_df%>%pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth/No Growth")
+
+all_growth_info <- all_growth_info%>%mutate(Genome=raw_growth_file$X[-1])%>%select(Genome,everything())
+piv.all_growth <- all_growth_info%>%pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth")%>%filter(Metabolites %in% metab_names, Metabolites != "oxalacetate",Genome %in% hq_genomes)
+piv.all_growth$Growth <- as.numeric(piv.all_growth$Growth)
+piv.all_growth <- piv.all_growth%>%group_by(Genome)%>%summarise(Metabolites=Metabolites,Growth=Growth,norm_grow=Growth/max(Growth))%>%mutate(norm_grow=case_when(is.na(norm_grow) ~ 0, .default=norm_grow),`Growth/No Growth`=case_when(Growth > 0 ~ 1, .default=0))
+
+piv.all_growth$`Growth/No Growth` <- factor(piv.all_growth$`Growth/No Growth`,levels=c(1,0))
+
+binary_df<-all_growth_info%>%pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth")%>%filter(Metabolites %in% metab_names, Metabolites != "oxalacetate")%>%mutate(`Growth/No Growth`=case_when(Growth > 0 ~ 1, .default=0))%>%select(-Growth)%>%pivot_wider(.,names_from=Metabolites,values_from=`Growth/No Growth`)
+binary_mat<-binary_df%>%select(-Genome)%>%as.matrix()
+
+#We want to randomize the same number of 1 values per genome in the bootstrapped artificial datasets
+per_genome_ones <- rowSums(binary_mat)
+
+#Set up an external loop of 1,000 iterations of the randomization process
+num_bootstraps = 10000
+boot_agreement <- c()
+for (i in 1:num_bootstraps){
+  #Initialize the randomized data as all 0s
+  randomized_mat <- matrix(data = 0, nrow = dim(binary_mat)[1], ncol = dim(binary_mat)[2])
+  for (i in 1:dim(randomized_mat)[1]){
+    #Identify the number of ones to use for each genomes, randomize that many for each row
+    curr_ones <- per_genome_ones[i]
+    rand_positions <- sample(c(1:dim(randomized_mat)[2]), curr_ones, replace = FALSE)
+    
+    randomized_mat[i,rand_positions] <- 1
+  }
+  #Compute the agreement between the real and randomized data
+  agreement_mat <- binary_mat - randomized_mat
+  perc_agreement <- sum(rowSums(agreement_mat == 0))/(nrow(binary_mat)*ncol(binary_mat))
+  
+  #Store the percent agreement in our vector
+  boot_agreement <- c(boot_agreement, perc_agreement)
+}
+boot_df <- boot_agreement %>% as.data.frame()
+colnames(boot_df) <- c("Agreement")
+
+#Now we want to make a pretty figure of the distribution and then highlight that we are doing much better than this distribution
+boot_plot<-ggplot(data = boot_df, aes(x = Agreement))+
+  geom_histogram(aes(y = after_stat(density)), binwidth=0.001, fill = "grey75", color = "black")+
+  stat_function(fun = dnorm, args = list(mean = mean(boot_df$Agreement), sd = sd(boot_df$Agreement)), linewidth = 2)+
+  stat_function(fun = dnorm, args = list(mean = mean(boot_df$Agreement), sd = sd(boot_df$Agreement)), xlim = c(mean(boot_df$Agreement) + 2*sd(boot_df$Agreement), max(boot_df$Agreement)), geom = "area", alpha = 0.5, fill = "blue", linewidth = 2)+
+  stat_function(fun = dnorm, args = list(mean = mean(boot_df$Agreement), sd = sd(boot_df$Agreement)), xlim = c(min(boot_df$Agreement), mean(boot_df$Agreement) - 2*sd(boot_df$Agreement)), geom = "area", alpha = 0.5, fill = "blue", linewidth = 2)+
+  geom_vline(aes(xintercept = mean(Agreement), color = "Bootstrap Mean"), lty = 2, linewidth = 2)+
+  geom_vline(aes(xintercept = 0.736, color = "Model Agreement"), lty = 2, linewidth = 2)+
+  scale_color_manual(name = "Statistics", values = c(`Bootstrap Mean` = "blue", `Model Agreement` = "orange"))+
+  scale_x_break(c(0.63,0.725), ticklabels = c(seq(0.59,0.63,0.01),0.73,0.74))+
+  labs(x = "Percent Agreement", y = "Density of Counts", title = "Agreement between Gralka's experimental data and randomized data")+
+  expand_limits(x=c(0.59,0.74))+
+  theme_bw()+
+  theme(plot.title = element_text(hjust = 0.5, size = 20), axis.title = element_text(size=18), axis.text = element_text(size=18))
+
+matti.growth.heatmap <- ggplot()+
+  geom_tile(data=piv.all_growth,aes(x=Metabolites,y=Genome,fill=norm_grow))+
+  labs(fill="Growth")+
+  scale_fill_gradient(low="blue",high="red")+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=270,hjust=0))+
+  custom_theme
+
+matti.binary.heatmap <- ggplot()+
+  geom_tile(data=piv.all_growth,aes(x=Metabolites,y=Genome,fill=`Growth/No Growth`))+
+  scale_fill_manual(labels=c("Growth","No Growth"),values=c("orange","gray90"))+
+  labs(fill="Growth/No Growth")+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=270,hjust=0))+
+  custom_theme
+
+vitamin.rescue.growth <- read_csv(file="Data/matti_vit_gr_compare.csv")%>%rename(.,`Rescue Growth`=Growth_rates_max,`Growth/No Growth`=Growth)%>%filter(Genome %in% hq_genomes)
+
+single.rescue.growth <- read_csv(file="Data/matti_high_gr_compare.csv")%>%rename(.,`Single Rescue Growth`=Growth_rates_max,`Single Growth/No Growth`=Growth)%>%filter(Genome %in% hq_genomes)
+
+double.rescue.growth <- read_csv(file="Data/matti_dbl_gr_compare.csv")%>%rename(.,`Double Rescue Growth`=Growth_rates_max,`Double Growth/No Growth`=Growth)%>%filter(Genome %in% hq_genomes)
+
+matti.model.growth <- left_join(single.rescue.growth,double.rescue.growth,by=join_by(Genome==Genome,`Tested Compound`==`Tested Compound`))%>%
+  mutate(`Double Rescue Growth`=case_when(
+    is.na(`Double Rescue Growth`) == TRUE ~ 0,
+    .default=`Double Rescue Growth`
+  ),`Double Growth/No Growth`=case_when(
+    is.na(`Double Growth/No Growth`) == TRUE ~ 0,
+    .default=`Double Growth/No Growth`
+  ))%>%
+  mutate(`Rescue Growth`=pmax(`Single Rescue Growth`,`Double Rescue Growth`), `Growth/No Growth`=pmax(`Single Growth/No Growth`,`Double Growth/No Growth`))%>%
+  select(Genome,`Tested Compound`,`Rescue Growth`,`Growth/No Growth`)
+
+matti.model.growth <- matti.model.growth%>%
+  left_join(.,select(matti.metab.ids,c(X,Exchange_rxn)),by=join_by(`Tested Compound`==Exchange_rxn))%>%
+  rename(.,Metabolites=X)%>%
+  select(Genome,`Tested Compound`,Metabolites,everything())
+
+matti.model.growth <- matti.model.growth%>%
+  group_by(Genome)%>%
+  mutate(norm_grow=case_when(
+    max(`Rescue Growth`)>0 ~ `Rescue Growth`/max(`Rescue Growth`),
+    .default=0))
+
+model.binary.heatmap <- ggplot()+
+  geom_tile(data=matti.model.growth,aes(x=as.factor(Metabolites),y=Genome,fill=as.factor(`Growth/No Growth`)))+
+  scale_fill_manual(labels=c("No Growth","Growth"),values=c("gray90","orange"),na.value="gray90")+
+  labs(x="Metabolites", fill="Growth/No Growth")+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=270,hjust=0,vjust=0.5))+
+  custom_theme
+
+model.growth.heatmap <- ggplot()+
+  geom_tile(data=matti.model.growth,aes(x=Metabolites,y=Genome,fill=norm_grow))+
+  labs(fill="Growth")+
+  scale_fill_gradient(low="blue",high="red")+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=270,hjust=0,vjust=0.5))+
+  custom_theme
+
+#We also wnat to take data frames regarding agreements of model predictions for growth (binary and numerical) between CarveMe models and experimental data
+agree_df <- read.csv("Data/20241202_matti_agreement_final.csv")
+
+#Temporary line to convert the NAs for two compounds to zeroes
+agree_df <- agree_df%>%mutate(agreement_status=case_when(
+  is.na(agreement_status) == TRUE ~ "Perfect Agreement",
+  .default=agreement_status
+))
+
+# rename and order values
+
+agree_df$agreement_status[which(agree_df$agreement_status == "org_agree")] <- "Perfect Agreement"
+agree_df$agreement_status[which(agree_df$agreement_status == "single_rescue")] <- "Single Rescue"
+agree_df$agreement_status[which(agree_df$agreement_status == "double_rescue")] <- "Double Rescue"
+agree_df$agreement_status[which(agree_df$agreement_status == "false_neg")] <- "No Growth, Pathway Present"
+agree_df$agreement_status[which(agree_df$agreement_status == "false_pos")] <- "Model Growth, Exp. No Growth"
+agree_df$agreement_status[which(agree_df$agreement_status == "no_ex")] <- "No Growth, No Pathway"
+
+agree_df$agreement_status <- factor(agree_df$agreement_status,
+                              levels = c("Perfect Agreement", 
+                                         "Single Rescue",
+                                         "Double Rescue",
+                                         "No Growth, Pathway Present",
+                                         "No Growth, No Pathway",
+                                         "Model Growth, Exp. No Growth"))
+
+#Create a key in agree_df to match the supplementary data from Matti's paper in order to join the two tables
+agree_df <- agree_df%>%mutate(match_key=matti.metab.ids$X[match(agree_df$Metabolite,matti.metab.ids$BiGG_Name)])%>%
+  filter(Metabolite != "Oxaloacetate")
+
+
+#Plot matti's growth rates against the model predicted growth rates
+match.agree.df <- agree_df%>%
+  filter((growth_rate > 0 & vit_gr_rate > 0))%>%
+  group_by(Genome)%>%
+  mutate(norm_model=
+           case_when(max(vit_gr_rate) == min(vit_gr_rate) ~ 1,
+             max(vit_gr_rate) > 0 ~
+                       (vit_gr_rate - min(vit_gr_rate))/(max(vit_gr_rate) - min(vit_gr_rate)),
+                      .default=0),
+         norm_matti=
+           case_when(max(growth_rate) == min(growth_rate) ~ 1,
+             max(growth_rate) > 0 ~ 
+                       (growth_rate - min(growth_rate))/(max(growth_rate) - min(growth_rate)),
+                      .default=0))%>%
+  ungroup()%>%
+  mutate(norm_bin=cut(norm_model,c(0,0.25,0.75,1),right=TRUE,include.lowest=TRUE),
+         raw_bin=cut(vit_gr_rate,seq(0,max(vit_gr_rate),max(vit_gr_rate)/4),right=TRUE,include.loweest=TRUE))
+
+#Perform significance testing of the normalized binned data using a mutli-distribution Tukey test
+model=lm(match.agree.df$norm_matti ~ match.agree.df$norm_bin)
+ANOVA=aov(model)
+
+TUKEY <- TukeyHSD(x=ANOVA,'match.agree.df$norm_bin',conf.level=0.95)
+Tukey.levels <- TUKEY[["match.agree.df$norm_bin"]][,4]
+growth.Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
+growth.Tukey.labels$treatment <- rownames(growth.Tukey.labels)
+numeric.labels <- match(growth.Tukey.labels[,1],unique(growth.Tukey.labels[,1]))
+
+match.agree.df <- match.agree.df%>%mutate(group=growth.Tukey.labels$Letters[match(norm_bin,growth.Tukey.labels$treatment)])
+match.agree.df$group <- factor(match.agree.df$group,levels=c("a","b"))
+
+compare.raw.growth.plot <- ggplot()+
+  geom_point(data=match.agree.df,aes(x=vit_gr_rate,y=growth_rate),size=2,alpha=0.5)+
+  labs(x="Model Predicted Growth",y="Matti Predicted Growth",title="Raw Growth Comparison")+
+  custom_theme
+
+compare.norm.growth.plot <- ggplot()+
+  geom_point(data=match.agree.df,aes(x=norm_model,y=norm_matti),size=2,alpha=0.5)+
+  labs(x="Model Predicted Growth",y="Matti Predicted Growth",title="Genome Normalized Growth Comparison")+
+  custom_theme
+
+# binned.raw.compare.plot <- ggplot()+
+#   geom_boxplot(data=match.agree.df,aes(x=raw_bin, y=growth_rate))+
+#   labs(x="Model Predicted Growth",y="Matti Predicted Growth",title="Binned Raw Growth Comparison")+
+#   custom_theme
+
+binned.norm.compare.plot <- ggplot()+
+  geom_boxplot(data=match.agree.df,aes(x=norm_bin, y=norm_matti,color=group),size=1.5)+
+  labs(x="Model Predicted Growth",y="Matti Predicted Growth",color="Statistical Group",title="Binned Normalized Growth Comparison")+
+  custom_theme
+
+merged.compare.plot <- (compare.raw.growth.plot | compare.norm.growth.plot) / (binned.norm.compare.plot)
+
+# agg_png(filename="Figures/final-figs/binned-growth-comparison-plot.png",res=400,units="mm",height=150,width=300)
+
+#I also want to compute the precision, accuracy, and recall of our method compared to matti's experimental data
+sub.agree_df <- agree_df%>%select(c(Genome,Compound,Metabolite,match_key,agreement_status))
+sub.agree_df <- left_join(sub.agree_df,piv.all_growth,by=join_by(Genome == Genome, match_key == Metabolites))
+
+only_agreements <- sub.agree_df%>%filter(agreement_status %in% c("Perfect Agreement","Single Rescue","Double Rescue"))
+# only_agreements <- left_join(only_agreements,piv.binary_df,by=join_by(Genome == Genome, Compound == Metabolites))
+
+comparison.accuracy <- sub.agree_df%>%summarise(accuracy=sum(agreement_status%in%c("Perfect Agreement","Single Rescue","Double Rescue"))/n())
+
+true_positives <- only_agreements%>%filter(`Growth/No Growth`==1)%>%summarise(count=n())%>%as.matrix()
+false_positives <- sub.agree_df%>%filter(agreement_status=="Model Growth, Exp. No Growth")%>%summarise(count=n())%>%as.matrix()
+false_negatives <- sub.agree_df%>%filter(agreement_status%in%c("No Growth, Pathway Present","No Growth, No Pathway"))%>%summarise(count=n())%>%as.matrix()
+
+comparison.precision <- true_positives/(true_positives+false_positives)
+
+comparison.recall <- true_positives/(true_positives+false_negatives)
+
+#Rearrange the original agreement df by class and classification
+agree_df <- agree_df%>% arrange(Higher.Level.Classification)
+class <- unique(agree_df$Higher.Level.Classification)
+
+# reorder classes
+class <- class[c(2,1,3,4,5,6)]
+
+# making everything pretty be reordering things and providing associated colors
+agree_df$Higher.Level.Classification <- factor(agree_df$Higher.Level.Classification,
+                                         levels = class)
+
+color_df <- agree_df%>% filter(Genome == "12B01")%>% arrange(Higher.Level.Classification)
+
+agree_df$Compound <- factor(agree_df$Compound, levels = color_df$Compound)
+
+color_match <- data.frame(class = unique(color_df$Higher.Level.Classification),
+                          color = c("#ac9c3d","#b84c7d","#6881d8",
+                                    "#8650a6","#56ae6c","#ba543d"))
+
+color_order <- color_match$color[match(color_df$Higher.Level.Classification, color_match$class)]
+
+agree_df$simple_name <- agree_df$X[match(agree_df$Compound,agree_df$Exchange_rxn)]
+
+#Need to change the Metabolite column in agree_df to a factor with levels that match the order of Metabolites in color_df
+agree_df <- agree_df%>%
+  mutate(Metabolite=factor(Metabolite, levels=color_df$Metabolite))
+
+matti.agree.heatmap <- ggplot() +
+  geom_tile(data = agree_df, aes(x = Metabolite, y = Genome, fill = agreement_status), color = "white") +
+  geom_point(data = color_df, aes(x = Inf, y = Inf, color = Higher.Level.Classification), size = 0) +
+  annotate(geom = "line", x = seq(0.5,20.5,by=0.5), y =-0.01, color = "#ac9c3d", lwd = 2) +
+  annotate(geom = "line", x = seq(20.5,42.5,by=0.5), y =-0.01, color = "#b84c7d", lwd = 2) +
+  annotate(geom = "line", x = seq(42.5,55.5,by=0.5), y =-0.01, color = "#6881d8", lwd = 2) +
+  annotate(geom = "line", x = seq(55.5,56.5,by=0.5), y =-0.01, color = "#8650a6", lwd = 2) +
+  annotate(geom = "line", x = seq(56.5,57.5,by=0.5), y =-0.01, color = "#56ae6c", lwd = 2) +
+  annotate(geom = "line", x = seq(57.5,58.5,by=0.5), y =-0.01, color = "#ba543d", lwd = 2) +
+  labs(x = "Compound", y = "Genome", fill = "Test Result", color = "Compound Classificaiton") +
+  scale_fill_manual(values = c("#84c7e3","#4995b9","#356173",
+                               "grey90","#c17894","#d44290")) +
+  scale_color_manual(values = c("#ac9c3d","#b84c7d","#6881d8",
+                                "#8650a6","#56ae6c","#ba543d")) +
+  coord_cartesian(clip = "off", xlim = c(1,58), ylim = c(1,146)) +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.text.x = element_text(size = 7, angle = -90,hjust = 0,vjust = 0.6),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_text(vjust = 0,size=12),
+        axis.title.y = element_text(size=12),
+        axis.text.y = element_text(size = 5),
+        plot.margin = ggplot2::margin(5,5,15,5),
+        legend.title = element_text(size=12),
+        legend.text = element_text(size=8),
+        legend.box = element_blank()) +
+  guides(color = guide_legend(override.aes = list(shape = 15, size = 7)))
+
+# agg_png(filename="Figures/final-figs/matti-agreement-heatmap.png",units="mm",res=400,height=300,width=225)
+
+#Recreate the heatmap based exclusively on the presence/absence of the exchange reaction
+ex.agree.heatmap <- ggplot() +
+  geom_tile(data = agree_df, aes(x = Metabolite, y = Genome, fill = as.factor(ex_agree)), color = "white") +
+  geom_point(data = color_df, aes(x = Inf, y = Inf, color = Higher.Level.Classification), size = 0) +
+  annotate(geom = "line", x = seq(0.5,20.5,by=0.5), y =-0.01, color = "#ac9c3d", lwd = 2) +
+  annotate(geom = "line", x = seq(20.5,42.5,by=0.5), y =-0.01, color = "#b84c7d", lwd = 2) +
+  annotate(geom = "line", x = seq(42.5,55.5,by=0.5), y =-0.01, color = "#6881d8", lwd = 2) +
+  annotate(geom = "line", x = seq(55.5,56.5,by=0.5), y =-0.01, color = "#8650a6", lwd = 2) +
+  annotate(geom = "line", x = seq(56.5,57.5,by=0.5), y =-0.01, color = "#56ae6c", lwd = 2) +
+  annotate(geom = "line", x = seq(57.5,58.5,by=0.5), y =-0.01, color = "#ba543d", lwd = 2) +
+  labs(x = "Compound", y = "Genome", fill = "Agreement", color = "Compound Classificaiton") +
+  scale_fill_manual(labels = c("Growth/No EX rxn","Perfect Agreement","EX rxn/No Growth","NA"), values = c("red","#84c7e3","grey90"),na.value="black") +
+  scale_color_manual(values = c("#ac9c3d","#b84c7d","#6881d8",
+                                "#8650a6","#56ae6c","#ba543d")) +
+  coord_cartesian(clip = "off", xlim = c(1,58), ylim = c(1,146)) +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.text.x = element_text(size = 7, angle = -90,hjust = 0,vjust = 0.6),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_text(vjust = 0,size=12),
+        axis.title.y = element_text(size=12),
+        axis.text.y = element_text(size = 5),
+        plot.margin = ggplot2::margin(5,5,15,5),
+        legend.title = element_text(size=12),
+        legend.text = element_text(size=8),
+        legend.box = element_blank()) +
+  guides(color = guide_legend(override.aes = list(shape = 15, size = 7)))
+
+#Stitch together a plot showing the binary growth/no growth measured by Matti, the original agreement map with just the reactions, and the new map based on model growth
+#Also merge in the nice metabolite names and reorder the columns for the experimental data frame
+piv.all_growth <- piv.all_growth%>%
+  rename(Compound=Metabolites)%>%
+  left_join(.,select(agree_df,Genome,Metabolite,Higher.Level.Classification,agreement_status,match_key),by=join_by(Genome==Genome,Compound==match_key))
+
+#Replot the binary plot with the right metabolite names and matching theming
+plot.binary.heatmap <- ggplot()+
+  geom_tile(data=piv.all_growth,aes(x=Metabolite,y=Genome,fill=`Growth/No Growth`))+
+  geom_point(data = color_df, aes(x = Inf, y = Inf, color = Higher.Level.Classification), size = 0) +
+  annotate(geom = "line", x = seq(0.5,20.5,by=0.5), y =-0.01, color = "#ac9c3d", lwd = 2) +
+  annotate(geom = "line", x = seq(20.5,42.5,by=0.5), y =-0.01, color = "#b84c7d", lwd = 2) +
+  annotate(geom = "line", x = seq(42.5,55.5,by=0.5), y =-0.01, color = "#6881d8", lwd = 2) +
+  annotate(geom = "line", x = seq(55.5,56.5,by=0.5), y =-0.01, color = "#8650a6", lwd = 2) +
+  annotate(geom = "line", x = seq(56.5,57.5,by=0.5), y =-0.01, color = "#56ae6c", lwd = 2) +
+  annotate(geom = "line", x = seq(57.5,58.5,by=0.5), y =-0.01, color = "#ba543d", lwd = 2) +
+  labs(x = "Compound", y = "Genome", fill = "Agreement", color = "Compound Classificaiton")+
+  scale_fill_manual(labels=c("Growth","No Growth"),values=c("orange","gray90"))+
+  scale_color_manual(values = c("#ac9c3d","#b84c7d","#6881d8",
+                                "#8650a6","#56ae6c","#ba543d")) +
+  coord_cartesian(clip = "off", xlim = c(1,58), ylim = c(1,146))+
+  theme(axis.text.x=element_text(angle=270,hjust=0))+
+  custom_theme+
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        axis.text.x = element_text(size = 7, angle = -90,hjust = 0,vjust = 0.6),
+        axis.ticks.x = element_blank(),
+        axis.title.x = element_text(vjust = 0,size=12),
+        axis.title.y = element_text(size=12),
+        axis.text.y = element_text(size = 5),
+        plot.margin = ggplot2::margin(5,5,15,5),
+        legend.title = element_text(size=12),
+        legend.text = element_text(size=8),
+        legend.box = element_blank()) +
+  guides(color = guide_legend(override.aes = list(shape = 15, size = 7)))
+
+# agg_png(filename="Figures/final-figs/matti-growth-test-multipanel-plot.png",res=400,units="mm",height=350,width=700)
+# wrap_plots(plot.binary.heatmap, ex.agree.heatmap, matti.agree.heatmap, nrow=1,ncol=3)
+# dev.off()
+
+#Identify which metabolites are present in our set of classified metabolites
+match_acids <- c()
+for (i in 1:length(colnames(acid_growth_info))){
+  curr_search <- colnames(acid_growth_info)[i]
+  matches <- grep(curr_search,class_file$Metabolite,ignore.case=TRUE)
+  if (is_empty(matches)==TRUE){
+    print(paste("Metabolite",curr_search,"has no matches!"))
+    next
+  }
+  match_acids <- rbind(match_acids,as.matrix(class_file[matches,]))
+}
+
+match_sugars <- c()
+for (i in 1:length(colnames(sugar_growth_info))){
+  curr_search <- colnames(sugar_growth_info)[i]
+  matches <- grep(curr_search,class_file$Metabolite,ignore.case=TRUE)
+  if (is_empty(matches)==TRUE){
+    print(paste("Metabolite",curr_search,"has no matches!"))
+    next
+  }
+  match_sugars <- rbind(match_sugars,as.matrix(class_file[matches,]))
+}
+
+
+```
+
+### Read recruitment analysis... done!
+
+```{r Read Recruitment, echo=FALSE}
+#Note to myself: there are only 3,917 genomes represented here which is the number of bacterial genomes in the dereplicated OMD, no archaea read recruitment, which makes sense
+rpkm_vals <- read.csv("Data/carve_me_rpkm_1425.csv")
+meta <- read.csv("Data/Estuary_metadata - Celeste_Paper.csv")
+
+#I have discovered an issue in the metdata from Celeste's paper. The longitude values for the Pearl River estuary data is missing a one in the hundreds place (the longitude values are ~113 and reported as ~13). Implementing a manual fix
+meta <- meta%>%mutate(lon=case_when(Region=="Pearl_river" ~ lon+100, Region!="Pearl_river" ~ lon))
+
+som <- cbind(genome_IDs,majority_clust)%>%as.data.frame()
+colnames(som) <- c("value","clusters")
+som$value <- paste0(som$value,"-prokka-original")
+
+colnames(rpkm_vals)[1] <- "Genome"
+
+rpkm_vals <- rpkm_vals%>% pivot_longer(-Genome, names_to = "Sample", values_to = "rpkm")
+
+per_samp_rpkm <- rpkm_vals%>% group_by(Sample)%>%
+  summarise(sum_rpkm = sum(rpkm,na.rm = TRUE))
+
+rpkm_vals$cluster <- som$clusters[match(rpkm_vals$Genome,som$value)]
+rpkm_vals$Region <- meta$Region[match(rpkm_vals$Sample, meta$sra_acc)]
+
+som_rpkm <- rpkm_vals%>% filter(!is.na(cluster),!is.na(rpkm))%>% group_by(cluster, Sample)%>%
+  summarise(sum_rpkm = sum(rpkm,na.rm = TRUE))%>% ungroup()%>%
+  group_by(Sample)%>%
+  mutate(rel_rpkm = sum_rpkm/sum(sum_rpkm,na.rm=TRUE))
+
+som_rpkm$cluster <- factor(som_rpkm$cluster)
+
+som_rpkm$total_rpkm <- per_samp_rpkm$sum_rpkm[match(som_rpkm$Sample,per_samp_rpkm$Sample)]
+som_rpkm$lat <- meta$lat[match(som_rpkm$Sample, meta$sra_acc)]
+som_rpkm$long <- meta$lon[match(som_rpkm$Sample, meta$sra_acc)]
+som_rpkm$Region <- meta$Region[match(som_rpkm$Sample, meta$sra_acc)]
+som_rpkm$depth <- meta$depth[match(som_rpkm$Sample, meta$sra_acc)]
+
+som_rpkm$lat[which(som_rpkm$lat == -3645)] <- (-36.45) # See if this is the issue
+
+#There are some stations that do not have metadata like lat and long, might want to exclude these above, but definitely exclude below in the regional analysis
+som_rpkm <- som_rpkm%>%filter(!is.na(Region))
+
+#There is a Chesapeake Bay region and a CB region which also measures the Chesapeake Bay so I am going to merge these
+# som_rpkm <- som_rpkm%>%mutate(Region=case_when(Region=="CB" ~ "Chesapeake Bay", Region!="CB" ~ Region))
+
+#Want to try a couple of stacked abundance plots like in the Louca papers showing that phylogeny and function differ
+#We want to try grouping the RPKM values into 5 major groups for an illustrative figure
+rpkm_vals <- rpkm_vals%>%
+  mutate(SuperRegion=case_when(
+    Region %in% c("Chesapeake Bay","CB","Columbia River","Pearl_river","SFBay","Yaquina Bay") ~ "Estuarine",
+    Region %in% c("NPAC","Sapelo","SI","GOM","Baltic Sea","Baltic_Pelagic","Black Sea") ~ "Coastal",
+    Region %in% c("MED","RED") ~ "Oligotrophic Seas",
+    Region %in% c("PON","POS","AON","AOS","ION","IOS","HOT") ~ "Oligotrophic Open Ocean",
+    Region %in% c("SOC") ~ "Southern Ocean", .default=NA))
+
+#Store the Sample -> Region -> SuperRegion info to easily join it to any dataframe
+sample.classif <- rpkm_vals%>%select(Sample,Region,SuperRegion)%>%unique()%>%filter(!is.na(SuperRegion))
+
+regional_rpkm <- som_rpkm%>%group_by(cluster,Region)%>%summarise(sum_rpkm=sum(sum_rpkm))%>%group_by(Region)%>%mutate(rel_rpkm=sum_rpkm/sum(sum_rpkm))
+
+regional_rpkm <- regional_rpkm%>%mutate(SuperRegion=case_when(
+    Region %in% c("Chesapeake Bay","CB","Columbia River","Pearl_river","SFBay","Yaquina Bay") ~ "Estuarine",
+    Region %in% c("NPAC","Sapelo","SI","GOM","Baltic Sea","Baltic_Pelagic","Black Sea") ~ "Coastal",
+    Region %in% c("MED","RED") ~ "Oligotrophic Seas",
+    Region %in% c("PON","POS","AON","AOS","ION","IOS","HOT") ~ "Oligotrophic Open Ocean",
+    Region %in% c("SOC") ~ "Southern Ocean", .default=NA))
+
+regional_rpkm$SuperRegion <- factor(regional_rpkm$SuperRegion,levels=c("Estuarine","Coastal","Oligotrophic Seas","Oligotrophic Open Ocean","Southern Ocean"))
+regional_rpkm$Region <- factor(regional_rpkm$Region,levels=unique(regional_rpkm$Region))
+regional_rpkm <- regional_rpkm%>%arrange(SuperRegion)
+
+# ggplot(regional_rpkm,aes(x=Region,y=rel_rpkm,fill=cluster))+
+#   geom_bar(position="stack",stat="identity")+
+#   theme_bw()+
+#   theme(axis.text.x=element_text(size=12,angle=45,hjust=1))+
+#   scale_fill_manual(values=c("#cc5a43","#7764cb","#75ab3d","#c062bb","#54a77a","#c75980","#b68f40","#678ecd"))
+
+#Now we want to look by individual sample
+#Bootstrap the data by Sample
+# set.seed(123)
+# 
+# sample.boot_df <- rpkm_vals%>%group_by(cluster,Sample)%>%reframe(Sample=unique(Sample))%>%filter(!is.na(cluster),!is.na(Sample))%>%mutate(boot_mean=NA,lb_boot=NA,ub_boot=NA)
+# for (j in 1:length(unique(sample.boot_df$Sample))){
+#   curr_region=unique(sample.boot_df$Sample)[j]
+#   bootstrapped_sums <- matrix(data=NA,nrow=1000,ncol=num_clusters)
+#   for (i in 1:num_clusters){
+#     clust_rpkm <- rpkm_vals%>%filter(cluster==i,Sample==curr_region)%>%select(rpkm)%>%as.matrix()%>%as.numeric()
+#     bootstrapped_sums[,i] <- generate_bootstrap_replicates(clust_rpkm,sum,n=1000,size=1000)
+#   }
+#   bootstrapped_rel_rpkm <- bootstrapped_sums/rowSums(bootstrapped_sums)
+#   quantiles <- apply(bootstrapped_rel_rpkm,2,quantile,probs=c(2.5,97.5)/100)
+#   means <- colMeans(bootstrapped_rel_rpkm)
+#   sample.boot_df$lb_boot[which(sample.boot_df$Sample==curr_region)] <- quantiles[1,]
+#   sample.boot_df$ub_boot[which(sample.boot_df$Sample==curr_region)] <- quantiles[2,]
+#   sample.boot_df$boot_mean[which(sample.boot_df$Sample==curr_region)] <- means
+# }
+# sample.boot_df$Sample <- factor(sample.boot_df$Sample,levels=c("Estuarine","Coastal","Oligotrophic Seas","Oligotrophic Open Ocean","Southern Ocean"))
+
+
+sample.som_rpkm <- som_rpkm%>%
+  mutate(SuperRegion=case_when(
+    Region %in% c("Chesapeake Bay","CB","Columbia River","Pearl_river","SFBay","Yaquina Bay") ~ "Estuarine",
+    Region %in% c("NPAC","Sapelo","SI","GOM","Baltic Sea","Baltic_Pelagic","Black Sea") ~ "Coastal",
+    Region %in% c("MED","RED") ~ "Oligotrophic Seas",
+    Region %in% c("PON","POS","AON","AOS","ION","IOS","HOT") ~ "Oligotrophic Open Ocean",
+    Region %in% c("SOC") ~ "Southern Ocean", .default=NA))
+
+sample.som_rpkm$SuperRegion <- factor(sample.som_rpkm$SuperRegion,levels=c("Estuarine","Coastal","Oligotrophic Seas","Oligotrophic Open Ocean","Southern Ocean"))
+sample.som_rpkm <- sample.som_rpkm%>%arrange(SuperRegion)
+sample.som_rpkm$Sample <- factor(sample.som_rpkm$Sample,levels=unique(sample.som_rpkm$Sample))
+
+# ggplot(sample.som_rpkm,aes(x=Sample,y=rel_rpkm,fill=cluster))+
+#   geom_bar(position="stack",stat="identity")+
+#   scale_fill_manual(values=c("#cc5a43","#7764cb","#75ab3d","#c062bb","#54a77a","#c75980","#b68f40","#678ecd"))+
+#   theme_bw()
+
+#Try clustering the stations within each regime and then reorder by regime and clustering order
+all_order <- c()
+for(i in c("Estuarine","Coastal","Oligotrophic Seas","Oligotrophic Open Ocean","Southern Ocean")){
+  curr_df <- sample.som_rpkm%>%filter(SuperRegion==i)%>%select(cluster,Sample,rel_rpkm)%>%pivot_wider(names_from=cluster,values_from=rel_rpkm)
+  curr_stations <- curr_df$Sample%>%as.vector()
+  curr_mat <- curr_df[,-1]%>%as.matrix()
+  curr_dist <- vegdist(curr_mat,method="euclidean")
+  curr_clust <- hclust(curr_dist,method="mcquitty")
+  
+  curr_order <- curr_clust$order
+  all_order <- c(all_order,curr_stations[curr_order])
+}
+#Now rearrange according to this order and plot
+sample.som_rpkm$Sample <- factor(sample.som_rpkm$Sample,levels=all_order)
+
+
+#Testing out adding lines to the top of the abundance plot to denote the TARA samples
+tara.samples<-meta%>%
+  filter(db=="TARA")%>%
+  select(sra_acc)%>%
+  as.matrix()
+
+sample.som_rpkm<-sample.som_rpkm%>%
+  mutate(TARA=case_when(Sample%in%tara.samples ~ "yes",
+                                        .default=NA))
+
+#Plot the three regions with lots of data as one group followed by the two small ones as another and stitch together with patchwerk
+all.abund.plot1 <- ggplot(filter(sample.som_rpkm,SuperRegion%in%c("Estuarine","Coastal")),aes(x=Sample,y=rel_rpkm,fill=cluster))+
+  geom_point(aes(x=Sample,y=1.005,color=TARA),size=2,alpha=0.5)+
+  scale_color_manual(values=c("black"),na.translate=FALSE)+
+    geom_bar(position="stack",stat="identity",width=1)+
+    coord_cartesian(ylim=c(0,1.01),expand=FALSE)+
+    scale_fill_manual(values=c("#cc5a43","#7764cb","#75ab3d","#c062bb","#54a77a","#c75980","#b68f40","#678ecd"))+
+    theme_bw()+
+  labs(x="",y="Relative RPKM values by sample")+
+    facet_grid(cols=vars(SuperRegion),scales="free_x",space="free_x")+
+    theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),panel.grid=element_blank(),legend.position="none")+
+  custom_theme
+
+all.abund.plot2 <- ggplot(filter(sample.som_rpkm,SuperRegion%in%c("Oligotrophic Open Ocean")),aes(x=Sample,y=rel_rpkm,fill=cluster))+
+  geom_point(aes(x=Sample,y=1.005,color=TARA),size=2,alpha=0.5)+
+  scale_color_manual(values=c("black"),na.translate=FALSE)+
+    geom_bar(position="stack",stat="identity",width=1)+
+    coord_cartesian(ylim=c(0,1.01), expand=FALSE)+
+    scale_fill_manual(values=c("#cc5a43","#7764cb","#75ab3d","#c062bb","#54a77a","#c75980","#b68f40","#678ecd"))+
+    theme_bw()+
+    labs(y="")+
+    facet_grid(cols=vars(SuperRegion),scales="free_x",space="free_x")+
+    theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),panel.grid=element_blank(),legend.position="none",axis.text.y=element_blank(),axis.ticks.y=element_blank(),axis.title.y=element_blank())+
+  custom_theme
+
+all.abund.plot3 <- ggplot(filter(sample.som_rpkm,SuperRegion%in%c("Oligotrophic Seas","Southern Ocean")),aes(x=Sample,y=rel_rpkm,fill=cluster))+
+  geom_point(aes(x=Sample,y=1.005,color=TARA),size=2,alpha=0.5)+
+  scale_color_manual(values=c("black"),na.translate=FALSE)+
+    geom_bar(position="stack",stat="identity",width=1)+
+    coord_cartesian(ylim=c(0,1.01),expand=FALSE)+
+    scale_fill_manual(values=c("#cc5a43","#7764cb","#75ab3d","#c062bb","#54a77a","#c75980","#b68f40","#678ecd"))+
+    theme_bw()+
+  labs(x="",fill="Cluster")+
+    facet_grid(cols=vars(SuperRegion),scales="free_x")+
+    theme(axis.text.x=element_blank(),axis.ticks.x=element_blank(),panel.grid=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank(),axis.title.y=element_blank())+
+  guides(color="none", fill=guide_legend())+
+  custom_theme
+
+# (all.abund.plot1 | all.abund.plot2 | all.abund.plot3) + plot_layout(widths=c(1,2,1),guides="collect")
+
+
+#Bootstrap the data by Region to get bar plots
+set.seed(123)
+
+region.boot_df <- rpkm_vals%>%group_by(cluster,Region)%>%reframe(Region=unique(Region))%>%filter(!is.na(cluster),!is.na(Region))%>%mutate(boot_mean=NA,lb_boot=NA,ub_boot=NA)
+for (j in 1:length(unique(region.boot_df$Region))){
+  curr_region=unique(region.boot_df$Region)[j]
+  bootstrapped_sums <- matrix(data=NA,nrow=1000,ncol=num_clusters)
+  for (i in 1:num_clusters){
+    clust_rpkm <- rpkm_vals%>%filter(cluster==i,Region==curr_region)%>%select(rpkm)%>%as.matrix()%>%as.numeric()
+    bootstrapped_sums[,i] <- generate_bootstrap_replicates(clust_rpkm,sum,n=1000,size=10000)
+  }
+  bootstrapped_rel_rpkm <- bootstrapped_sums/rowSums(bootstrapped_sums)
+  quantiles <- apply(bootstrapped_rel_rpkm,2,quantile,probs=c(2.5,97.5)/100)
+  means <- colMeans(bootstrapped_rel_rpkm)
+  region.boot_df$lb_boot[which(region.boot_df$Region==curr_region)] <- quantiles[1,]
+  region.boot_df$ub_boot[which(region.boot_df$Region==curr_region)] <- quantiles[2,]
+  region.boot_df$boot_mean[which(region.boot_df$Region==curr_region)] <- means
+}
+region.boot_df$Region <- factor(region.boot_df$Region,levels=c("Chesapeake Bay","CB","Columbia River","Pearl_river","SFBay","Yaquina Bay","NPAC","Sapelo","SI","GOM","Baltic Sea","Baltic_Pelagic","Black Sea","MED","RED","PON","POS","AON","AOS","ION","IOS","HOT","SOC"))
+
+region.boot_df <- region.boot_df%>%mutate(growth=case_when(cluster==2 ~ "Fast Grower", cluster%in%c(4,6) ~ "Slow Intermediate",cluster==5 ~ "Fast Intermediate", .default="Slow Grower"))
+region.boot_df$growth <- factor(region.boot_df$growth,levels=c("Fast Grower","Fast Intermediate","Slow Intermediate","Slow Grower"))
+
+#Plot the bootstrapped output
+regional.abund.plot <- ggplot(region.boot_df,aes(x=cluster,y=boot_mean,fill=growth))+
+    geom_bar(stat="identity")+
+    scale_fill_manual(values=c("#F8766D","yellowgreen","#00BA38","#619CFF"))+
+    geom_hline(yintercept=0,lty=2)+
+    geom_errorbar(aes(x=cluster,ymin=lb_boot,ymax=ub_boot),width=0.2)+
+    facet_wrap(~Region)+
+    custom_theme+
+    labs(x="Cluster",y="Relative Bootstrapped RPKM",fill="Cluster")
+
+
+
+#Bootstrap the data by SuperRegion to get bar plots
+set.seed(123)
+
+boot_df <- rpkm_vals%>%group_by(cluster,SuperRegion)%>%reframe(SuperRegion=unique(SuperRegion))%>%filter(!is.na(cluster),!is.na(SuperRegion))%>%mutate(boot_mean=NA,lb_boot=NA,ub_boot=NA)
+for (j in 1:length(unique(boot_df$SuperRegion))){
+  curr_region=unique(boot_df$SuperRegion)[j]
+  bootstrapped_sums <- matrix(data=NA,nrow=1000,ncol=num_clusters)
+  for (i in 1:num_clusters){
+    clust_rpkm <- rpkm_vals%>%filter(cluster==i,SuperRegion==curr_region)%>%select(rpkm)%>%as.matrix()%>%as.numeric()
+    bootstrapped_sums[,i] <- generate_bootstrap_replicates(clust_rpkm,sum,n=1000,size=10000)
+  }
+  bootstrapped_rel_rpkm <- bootstrapped_sums/rowSums(bootstrapped_sums)
+  quantiles <- apply(bootstrapped_rel_rpkm,2,quantile,probs=c(2.5,97.5)/100)
+  means <- colMeans(bootstrapped_rel_rpkm)
+  boot_df$lb_boot[which(boot_df$SuperRegion==curr_region)] <- quantiles[1,]
+  boot_df$ub_boot[which(boot_df$SuperRegion==curr_region)] <- quantiles[2,]
+  boot_df$boot_mean[which(boot_df$SuperRegion==curr_region)] <- means
+}
+boot_df$SuperRegion <- factor(boot_df$SuperRegion,levels=c("Estuarine","Coastal","Oligotrophic Seas","Oligotrophic Open Ocean","Southern Ocean"))
+
+#Add growth-based classifications for plots
+boot_df <- boot_df%>%mutate(growth=case_when(cluster==2 ~ "Fast Grower", cluster%in%c(4,6) ~ "Slow Intermediate",cluster==5 ~ "Fast Intermediate", .default="Slow Grower"))
+boot_df$growth <- factor(boot_df$growth,levels=c("Fast Grower","Fast Intermediate","Slow Intermediate","Slow Grower"))
+
+#Plot the bootstrapped output
+super.regional.abund.plot <- ggplot(boot_df,aes(x=cluster,y=boot_mean,fill=growth))+
+    geom_bar(stat="identity")+
+    scale_fill_manual(values=c("#F8766D","yellowgreen","#00BA38","#619CFF"))+
+    geom_hline(yintercept=0,lty=2)+
+    geom_errorbar(aes(x=cluster,ymin=lb_boot,ymax=ub_boot),width=0.2)+
+    facet_wrap(~SuperRegion)+
+    custom_theme+
+    labs(x="Cluster",y="Relative Bootstrapped RPKM",fill="Cluster")
+
+
+#There's something wrong with TARA_072_MES_0dot22_3 where it has an Inf rpkm value so I am going to arbitrarily remove it
+som_rpkm <- som_rpkm%>%filter(!sum_rpkm=="Inf")
+region.som.rpkm <- som_rpkm%>%group_by(cluster,Region)%>%summarise(sum_rpkm = sum(sum_rpkm,na.rm = TRUE),median_long=median(long),median_lat=median(lat))%>% ungroup()%>%
+  group_by(Region)%>%
+  mutate(rel_rpkm = sum_rpkm/sum(sum_rpkm,na.rm=TRUE))
+
+map <- map_data("world")
+
+#We need to make some manual adjustments to certain lat/long values to get good separation for map plots
+region.som.rpkm <- region.som.rpkm%>%mutate(
+  median_lat=case_when(Region=="PON" ~ median_lat+15, Region=="Baltic Sea" ~ median_lat+5, .default = median_lat),
+  median_long=case_when(Region=="Baltic Sea" ~ median_long+3.5, Region=="Baltic_Pelagic" ~ median_long+2, .default=median_long))
+
+
+#Faceted map plot that shows the per oceanographic region rpkm values. An average lat and long is used for positioning the points
+regional_map_plot <- ggplot() +
+  geom_polygon(data = map, aes(x=long, y = lat, group = group), fill = "grey", color = "black") + 
+  geom_point(data = region.som.rpkm, aes(x = median_long, y = median_lat, size = sum_rpkm, color = rel_rpkm), alpha = 0.7) +
+  coord_cartesian(expand = 0) + facet_wrap(~cluster) +
+  scale_color_viridis_c(labels = scales::percent_format()) +
+  scale_size_continuous(range = c(4,12), guide = "none") +
+  labs(x = "Longitude", y = "Latitude", size = "Total RPKM", color = "Relative Abundance") +
+  theme(plot.title=element_text(hjust=0.5),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 12),
+        axis.text = element_text(size =12),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 12),
+        legend.key = element_blank(),
+        legend.direction = "horizontal",
+        legend.position = c(1,0),
+        legend.justification = c(1,0)) +
+  guides(color = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(2, "in")),
+         size = guide_legend(title.position = "top", title.hjust = 0.5))
+
+
+#Same map plot with points for every station instead
+per_clust_map_plot <- ggplot() +
+  geom_polygon(data = map, aes(x=long, y = lat, group = group), fill = "grey", color = "black") + 
+  geom_point(data = som_rpkm, aes(x = long, y = lat, size = sum_rpkm, color = rel_rpkm), alpha = 0.7) +
+  coord_cartesian(expand = 0) + facet_wrap(~cluster) +
+  scale_color_viridis_c(labels = scales::percent_format()) +
+  labs(x = "Longitude", y = "Latitude", size = "Total RPKM", color = "Relative Abundance") +
+  theme(plot.title=element_text(hjust=0.5),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill = NA, color = "black"),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 12),
+        axis.text = element_text(size =12),
+        axis.title = element_text(size = 12),
+        legend.text = element_text(size = 12),
+        legend.title = element_text(size = 12),
+        legend.key = element_blank(),
+        legend.direction = "horizontal",
+        legend.position = c(1,0),
+        legend.justification = c(1,0)) +
+  guides(color = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(2, "in")),
+         size = guide_legend(title.position = "top", title.hjust = 0.5))
+
+```
+
+###   Table Generation
+```{r Creating Tables, echo=FALSE}
+#We want to make some tables for the publication associated with this project
+#Table defining metrics for each SOM cluster
+main.text.table=data.frame(cluster=c(1:num_clusters),num_genomes=cluster_df%>%group_by(clusters)%>%summarise(count=n())%>%select(count)%>%as.matrix()%>%as.vector())%>%mutate(designation=c("Slow","Fast","Slow","Slow Intermediate","Fast Intermediate","Slow Intermediate","Slow","Slow"),limiting_substrates=c(
+  c("Carboxylic Acids, Amino Acids"),
+  c("None"),
+  c("Carboxylic Acids, Peptides"),
+  c("Amino Acids"),
+  c("Carboxylic Acids"),
+  c("Carbohydrates"),
+  c("Peptides, Amino Acids"),
+  c("Carboxylic Acids, Amino Acids, B vitamins")
+),top2_taxa=c(
+  c("Pelagibacterales, Marinisomatales"),
+  c("Enterobacterales, Rhodobacterales"),
+  c("Pelagibacterales, Cytophagales"),
+  c("Flavobacterales, Synechococcales"),
+  c("Pseudomonadales, Rhodobacterales"),
+  c("Flavobacterales, Cytophagales"),
+  c("Opituales, Pelagibacterales"),
+  c("Flavobacterales, Pelagibacterales")
+),top2_regions=c(
+  c("Oligotrophic Seas, Oligotrophic Open Ocean"),
+  c("Estuarine, Coastal"),
+  c("Southern Ocean, Oliogtrophic Open Ocean"),
+  c("Coastal, Estuarine"),
+  c("Estuarine, Southern Ocean"),
+  c("Southern Ocean, Coastal"),
+  c("Estuarine, Oligotrophic Open Ocean"),
+  c("Oligotrophic Seas, Oligotrophic Open Ocean")
+))
+
+#Table defining the SOM cluster assignment, dCUB, etc. of each genome
+all.genome.table <- data.frame(genome=cluster_df$value,cluster=cluster_df$clusters)%>%left_join(.,select(growth_df,c(value,dCUB)),by=join_by(genome==value))%>%left_join(.,select(new_phylo,c(Genome.prokka,order,genus,species)),by=join_by(genome==Genome.prokka))
+colnames(all.genome.table) <- c("Genome","Cluster","dCUB","Order","Genus","Species")
+
+grow.req.per.genome <- grow_df%>%group_by(genome,metabolite_class)%>%summarise(mean_req=mean(growth_req))%>%pivot_wider(names_from=metabolite_class,values_from=mean_req)
+
+all.genome.table <- left_join(all.genome.table,grow.req.per.genome,by=join_by(Genome==genome))
+
+#Table for the read recruitment data by region that provides the RPKM values for each cluster, and the oceanographic regime
+regional.RPKM.table <- region.boot_df%>%select(cluster,Region,boot_mean)%>%pivot_wider(names_from="cluster",values_from="boot_mean")
+colnames(regional.RPKM.table) <- c("Region",paste("Cluster",c(1:num_clusters)))
+
+superregion.rpkm.table <- boot_df%>%select(cluster,SuperRegion,boot_mean)%>%pivot_wider(names_from="cluster",values_from="boot_mean")
+colnames(superregion.rpkm.table) <- c("Regime",paste("Cluster",c(1:num_clusters)))
+
+#Save the p-values from the growth distribution comparisons
+tukey_df <- growth.tukey[["growth_df$clusters"]]%>%as.data.frame()
+tukey_df <- tukey_df%>%mutate(names=rownames(tukey_df))
+
+p.value.table <- tukey_df%>%select(names,"p adj")
+colnames(p.value.table) <- c("Cluster Comparison","p value"); rownames(p.value.table) <- c()
+
+```
+
+## Results
+
+#### Data phylogeny and model consensus
+
+#### Figure 1: Diversity of dataset, quality of metabolic models, and designation of metabolic clusters. Phylogenetic tree of all 3,984 bacterial genomes included in this study (including the 66 reference genomes from the BiGG database). The tree is contextualized by several external rings that describe different qualitative and quantitative components of the genomes in this study. The first ring around the tree denotes both the position and density of high quality ensembles within the tree as well as the assignment of these genomes to each of our eight SOM clusters. The second ring shows the ensemble consensus score (Equation 1) for each genome in the tree. The third, sparse ring of red lines denotes the position of the 66 BiGG reference genomes present in the tree. Finally, the fourth and innermost ring shows the location of the top 15 most abundant orders. 
+
+```{r Tree plot, echo=FALSE, fig.width=12, fig.height=12}
+
+plot(out_tree4)
+
+```
+
+#### Figure 2: Substrate sensitivities for 8 SOM clusters. Bubble plot of the mean growth sensitivity values for genomes in each of our 8 SOM clusters. A growth sensitivity of 1 indicates high sensitivity to that substrate such that the modeled growth rate was reduced proportionally to the reduction in the substrate’s flux (e.g., 50% substrate reduction corresponded to 50% growth rate reduction). The size of the bubbles in this plot reflect the relative sensitivity of each of the 8 SOM clusters to a given compound class where larger bubbles indicate that cluster was more sensitive to that compound class than others. The 6 compound classes which resulted in significant growth reduction for at least one of the SOM clusters are shown here. The full results for all 11 substrate classes are provided in Supplemental Figures S2 & S3). Cluster numbers were colored based on maximal genomic growth rate (Supplemental Figure S6).
+
+```{r Growth Dependencies, echo=FALSE, fig.width=12, fig.height=12}
+
+plot(flux_bubble_plot)
+
+```
+
+#### Figure 3: Biogeographical relative abundances of 8 SOM clusters. Clustered bar charts of the relative abundances of the 8 SOM clusters as determined by RPKM at each of the 1,203 stations assigned to one of the 23 oceanographic regions. Stations were grouped into our 5 defined oceanographic categories and then arranged based on a hierarchical clustering of the relative abundances at the stations assigned to each of these 5 groups. These relative abundances further establish the validity of our predicted metabolic clusters. In accordance with the literature, fast growing copiotrophs dominate eutrophic environments like estuaries before being succeeded by slower growing specialists in low nutrient open ocean environments. The observed variability within each category also demonstrates the potential for environmental characteristics (e.g., nutrient concentrations) to dictate, at least in part, the local microbial community composition.
+
+```{r Biogeographical Distributions, echo=FALSE, fig.width=12, fig.height=12}
+
+(all.abund.plot1 | all.abund.plot2 | all.abund.plot3) + plot_layout(widths=c(1,2,1),guides="collect")
+
+```
+
+### Supplemental Figures
+
+#### Supplemental Figure S1: Bubble plot of the mean growth sensitivity values for two new sets of 6 SOM clusters, rather than 8, generated on the 1,591 genomes with a consensus of 80% or greater (top) and the 983 genomes above a more stringent threshold of 90% or greater (bottom). A growth sensitivity of 1 indicates high sensitivity to that substrate such that the modeled growth rate was reduced proportionally to the reduction in the substrate’s flux (e.g., 50% substrate reduction corresponded to 50% growth rate reduction). The size of the bubbles in this plot reflect the relative sensitivity of each of the 6 SOM clusters to a given compound class where larger bubbles indicate that cluster was more sensitive to that compound class than others. While the ordering of the clusters as well as the number of clusters of each type changes, we still observe the same overall patterns. We have one fast-growing cluster with no growth sensitivities, multiple clusters with sensitivity to one compound, and multiple with sensitivity to two compounds. The fast growth cluster and intermediate growth single sensitivity clusters from the primary analysis emerged in this higher consensus group of models. The shifts in sensitivities and reduction in number of clusters for the slow-growing clusters is consistent with the fact that the more classically oligotrophic orders generally had model ensembles with lower consensus values. Thus, increasing the consensus threshold is more likely to exclude these genomes from the SOM generation and would be expected to have the largest impact on these clusters.
+
+```{r Alternative parameterizations, echo=FALSE, fig.width=12,fig.height=12}
+
+knitr::include_graphics("Figures/final-figs/K6-flux-bubble-plot.png")
+
+knitr::include_graphics("Figures/final-figs/consensus90-sensitivity-bubble-plot.png")
+
+```
+
+#### Supplemental Figure S2: Distribution of growth sensitivity values by cluster. Density plots of the growth sensitivity values for each model for each of the 11 compound classes grouped by SOM cluster (N=1,050,060).
+
+```{r Sensitivity density plot, echo=FALSE, fig.width=12, fig.height=12}
+
+som.proto.dist_plot
+
+```
+
+#### Supplemental Figure S3:Comparison of results between CarveMe model ensembles and experimental growth studies performed in Gralka et al. Heatmap of agreement between CarveMe model ensemble reactions and experimental growth data for a collection of 146 strains grown on 58 different sole carbon sources. The specific classification of each compound according to our manually curated categories is shown as a sequence of colored bars along the x-axis. When comparing the growth/no growth predictions between CarveMe and the experimental data, we looked for perfect agreement, as well as agreement when supplementing the CarveMe models with one (single rescue) or two (double rescue) non-Carbon compounds. Collectively, we considered these three cases (shades of blue in the heatmap) as agreement between the model and experimental data, or a true positive. The gray squares represent cases where the CarveMe model had the pathway to uptake the compound in question but did not demonstrate growth on it, suggesting the model may have been missing key pathways to catabolize that compound. The dark pink squares reflect the case where the experimental data predicted growth but the CarveMe model neither grew on that compound nor had the pathway to uptake that compound. The light gray and dark pink squares collectively represent the instances of false negatives in the comparison. Finally, the light pink squares represent the case where we predicted growth on a compound from the CarveMe models but those microbes showed no ability to grow on that compound in the experimental data (false positives).
+
+```{r Matti agreement heatmap, echo=FALSE, fig.width=12, fig.height=12}
+
+matti.agree.heatmap
+
+```
+
+#### Supplemental Figure SX: Bootstrap experiment of model accuracy to experimental data. We performed a bootstrap analysis to compare the accuracy (model agreement) of the media predictions from CarveMe models built on the strains from Gralka et al. to the accuracy we would achieve using a randomized data schema. In this analysis the binary growth/no growth outcomes were randomized such that the randomized data had the same number of positive growth signals for each of the genomes from the experimental study. This was then simulated 10,000 times to establish a distribution of accuracy values using random data. The mean value of these measured accuracy values is shown with the blue dashed line, while the data beyond 2 standard deviations in each direction is highlighted by the blue shaded areas of the Gaussian curve drawn over this distribution. Our real accuracy measurement is shown with the dashed orange line, sufficiently higher than the predicted mean accuracy with randomized data (note the break in the x-axis values).
+
+```{r Agreement bootstrapping, echo=FALSE, fig.width=12, fig.height=12}
+
+boot_plot
+
+```
+
+#### Supplemental Figure S4: Relative growth sensitivities between SOM clusters. (a) Ordered bar plot of the proportion of models across all clusters with substantial growth sensitivity to the reduction of each compound class (substantial is defined as >80% reduction in growth). (b) Bar plots of the relative mean growth sensitivity values for each of the 11 compound classes across the 8 SOM clusters. The error bars represent one standard deviation. Plot facets are ordered from the highest overall sensitivity (carboxylic acids) to the lowest (amines/amides). 
+
+```{r SOM clusters, echo=FALSE, fig.width=12, fig.height=12}
+
+cluster_plot
+
+```
+
+#### Supplemental Figure S5: Taxonomy by cluster. (a) Ordered bar plot of the proportion of models in each of the 15 most abundant orders with substantial growth sensitivity to the reduction of any compound class (substantial is defined as >80% reduction in growth). (b) Stacked bar plots of the relative abundances of the top 15 orders in each cluster. 
+
+```{r Phylo Plots, echo=FALSE, fig.width=12, fig.height=12}
+
+phylo.high.sens.plot
+
+phylo_abund_plot
+
+```
+
+
+#### Supplemental Figure S6: Codon usage bias (dCUB) by cluster. The dCUB values fall into four statistically distinct groups designated with letters according to the key. Statistical groupings were determined by an ANOVA test of the dCUB distributions using Tukey’s HSD with a 95% confidence interval. Group a is the slow-growing group (Clusters 1, 3, 7 and 8) and statistically distinct from the other clusters. Group c (Cluster 2) is the fast-growing group and is distinct from all other clusters. Groups ab and bc represent our intermediate growers. Specifically, group ab (Clusters 4 and 6) are statistically distinct from fast-growing group c but not from slow-growing group a, whereas group bc (Cluster 5) is statistically distinct from group a but not from group c.
+
+```{r Growth Figures, echo=FALSE, fig.width=12, fig.height=12}
+
+growth_violin_plot
+
+```
+
+#### Supplemental Figure SX:Bootstrap experiment of dCUB growth rates for randomized SOM clusters. Similarly to Supplemental Figure SXX, we performed a bootstrap analysis to compare the proportion of genomes below the critical dCUB threshold of -0.08 for clusters with randomly assigned genomes versus the real SOM clusters predicted by our method. The mean proportion from the bootstrapping analysis is shown in the dashed orange line. The area of the distribution beyond 2 standard deviations from this mean is highlighted in the blue shaded area of the Gaussian curve drawn over this distribution. The mean proportion of genomes below this threshold for our 8 SOM clusters are shown by the various dashed lines colored according to which cluster they represent. We see that our two intermediate growth clusters fall within our randomized distribution, which is unsurprising given that they represent an intermediate growth rate physiology. The 4 slow growing clusters fall more than 2 standard deviations below the bootstrap mean, indicating that those clusters grow more slowly than can be explained by random effects. Conversely, the fast and fast intermediate clusters fall more than 2 standard deviations above the bootstrap mean, confirming that on average they grow faster than we would expect from a random group of genomes.
+
+```{r dCUB bootstrap, echo=FALSE, fig.width=12, fig.height=12}
+
+boot.growth.plot
+
+```
+
+#### Supplemental Figure S7: Taxonomic abundance enrichments of top 15 Orders by cluster. Percentage enrichment in the relative abundance of the top 15 Orders (and Other) in each of the 8 SOM clusters compared to the relative abundances of each of these Orders in the full dataset.
+
+```{r Relative Abundances, echo=FALSE, fig.width=12, fig.height=12}
+
+phylo_rel_diff_plot
+
+```
+
+#### Supplemental Figure S8: Relative abundances of SOM clusters by oceanographic region. Sampling sites were grouped for bootstrapping according to the 23 oceanographic regions given in Table S3. For each region, bar plots of the average relative abundances of each of the 8 SOM clusters are shown. The relative abundances are calculated based on the bootstrap distributions of the raw RPKM values. The clusters are  colored by their growth strategy (fast, fast-intermediate, slow-intermediate, and slow). Error bars represent the standard deviations of the bootstrapped distributions.
+
+```{r Regional Read Recruitment, echo=FALSE, fig.width=12, fig.height=12}
+
+regional.abund.plot
+
+```
+
+#### Supplemental Figure S9: Relative abundances of SOM clusters by oceanographic category. Sampling sites were grouped for bootstrapping according to the 5 oceanographic categories. Bar plots show the average relative abundances of each of the 8 SOM clusters in each category where the abundance is based on the bootstrap distributions of the raw RPKM values. The clusters are  colored by their growth strategy (fast, fast-intermediate, slow-intermediate, and slow). Error bars represent the standard deviations of the bootstrapped distributions.
+
+```{r Regime Read Recruitment, echo=FALSE, fig.width=12, fig.height=12}
+
+super.regional.abund.plot
+
+```
+
+#### Supplemental Figure S11: SOM metrics. (a) The SOM grid is shown where each circle represents a grid point in the map (N=400). Grid points are colored by their assignment to the 8 defined SOM clusters. Grid points to which no genomes were assigned are colored gray to represent the absence of mapped data. It is important to note that the SOM uses a toroidal grid where the edges wrap around such that, for example, all nodes in Cluster 8 are in fact connected. (b) The training progress of the grid is shown for the duration of the map refinement process. (c) The number of models from each genome ensemble that were assigned to each SOM cluster, where a value of 60 denotes instances when all models from the ensemble were assigned to the same SOM cluster and a value of 0 denotes that no models from a specific ensemble were assigned to the cluster. Data is only shown for the 1,591 high consensus ensembles. The bimodal distribution of the data around 0 and 60 illustrates that all models from a given ensemble were almost always assigned to the same SOM cluster.
+
+
+```{r SOM metrics, echo=FALSE, fig.width=12, fig.height=12}
+
+print(som_grid_plot)
+
+plot(som.model,type="changes")
+
+plot(evenness_plot)
+
+```
+
+#### Supplemental Figure S12: PCA plot of the growth sensitivity data. The PCA captured 50.6% of the total variance on the first two principal component axes, and distinguished two major groups of data points, primarily separated by sensitivity to sugars (Carbohydrates/Derivatives) versus acids (Carboxylic Acids). Of note, the estimates of maximum growth rate were not included in this clustering. The points in the PCA are colored by SOM cluster assignment to illustrate that both approaches identified similar clustering of the data but that the SOM method was able to better differentiate between the 8 clusters. 
+
+```{r Alternative clustering, echo=FALSE, fig.width=12, fig.height=12}
+
+plot(pca_plot)
+
+```

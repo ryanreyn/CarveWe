@@ -75,11 +75,6 @@ class_file <- read.csv("Data/classified_metabolites.csv")
 #Try pre-filtering out Inorganics as well since they dominate the total flux by fraction
 class_file <- class_file%>%distinct(Metabolite,.keep_all=TRUE)%>%filter(!Higher.Level.Classification%in%c("Other","Inorganic"))
 
-#Load in the necessary data files and reformat as necessary
-metabolite_dictionary <- read.csv("./Data/all_max_flux_met_names_diamond.csv")
-metabolite_info <- read.csv("Data/all_max_flux_diamond_transposed.csv")
-file_headers <- read.csv("Data/all_max_flux_headers_diamond.csv")
-
 load(file="Data/new-growth50-test-data_all-cats.Rdata")
 
 #Fix some string display issues with metabolite class names
@@ -216,14 +211,16 @@ k <- num_clusters
 
 #Plot the kmeans distances as a function of the number of clusters for both clustering methodologies
 plot(cluster.dist.eval[, 'kmeans'] ~ try.k,
-     type = 'l')
+     type = 'l', xlab = "Number of clusters (k)", ylab = "Intracluster distance", cex.axis = 1.5, cex.lab = 1.5)
 
 lines(cluster.dist.eval[, 'hclust'] ~ try.k,
       col = 'red')
 
 legend('topright',
+       inset = c(-0.35,-0.05),
        legend = c('k-means', 'hierarchical'),
        col = c('black', 'red'),
+       cex = 1.5,
        lty = c(1, 1))
 
 
@@ -425,11 +422,13 @@ evenness_df <- as_tibble(counts_table)
 evenness_plot <- ggplot(evenness_df,aes(x=c(1:60),y=value))+
   geom_point(size=4)+
   labs(x="Number of replicates in cluster",y="Number of Genomes")+
-  theme_bw()+custom_theme
+  theme_bw()+
+  custom_theme+
+  theme(axis.text=element_text(size=20),
+        axis.title=element_text(size=20))
 
 # #We also want to identify for different levels of K how much genome replicates are being split into multiple nodes
 sizes <- c(2:20)
-# genome_IDs <- unique(file_headers$model_name)
 consensus <- matrix(data=0,nrow=length(sizes),ncol=1)
 breadth <- matrix(data=0,nrow=length(sizes),ncol=1)
 evenness <- matrix(data=0,nrow=length(sizes),ncol=1)
@@ -445,8 +444,6 @@ tmp_sample_clusters <- curr.sc[som.model$unit.classif]
   tmp.evenness <- matrix(data=0,nrow=length(genome_IDs),ncol=1)
   for (j in 1:length(genome_IDs)){
     curr_genome <- genome_IDs[j]
-    #curr.cons <- (which(file_headers$model_name %in% curr_genome)%>%sample_clusters[.]%>%table()%>%max())/60
-    #curr.breadth <- (which(file_headers$model_name %in% curr_genome)%>%sample_clusters[.]%>%unique()%>%length())/60
     curr_cluster <- which(rownames(metabolite_matrix) %in% curr_genome)%>%tmp_sample_clusters[.]
     curr.cons <- (curr_cluster%>%table()%>%max())/60
     curr.breadth <- (curr_cluster%>%unique()%>%length())/60
@@ -478,8 +475,6 @@ SOM_metrics_plot <- ggplot(consensus_df,aes(x=`Cluster Size`,y=Value,color=Metri
 source("Codes/phylo_code.R")
 
 # pull in data
-
-# tree <- read.tree("Data/source-genomes-GToTree_Output.tre")
 raw_tree <- read.iqtree("Data/bac-only-UFboot-tree.treefile")
 
 #Make some modifications to the tree file here so we can look at bootstrap support, etc.
@@ -875,9 +870,8 @@ all.dat.clust.plot <- ggplot() +
         panel.grid.major.y = element_line(color = "grey90", linewidth = 0.25)) +
   guides(fill = guide_legend(title.position = "top", title.hjust = 0.5, nrow = 1))
 
-sub_df <- new_df%>%filter(!metabolite_class%in%c("Alcohol","Amines/Amides","Ketones/Aldehydes","Organic Sulfur","Phospholipids/Fatty\nAcids/Triglycerides"))%>%mutate(metabolite_class=case_when(
+sub_df <- new_df%>%filter(!metabolite_class%in%c("Alcohol","Amines/Amides","Ketones/Aldehydes","Organic Sulfur","Phospholipids/Fatty Acids/Triglycerides"))%>%mutate(metabolite_class=case_when(
   metabolite_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
-  metabolite_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
   .default=metabolite_class
 ))
 sub_df <- sub_df%>%mutate(Group=case_when(clusters%in%c(1,3,7,8) ~ "slow", clusters == 2 ~ "fast", clusters%in%c(4,6) ~ "slow intermediate", clusters==5 ~ "fast intermediate"))
@@ -1549,32 +1543,44 @@ hq_genomes<-matti.quality%>%
   select(Genome)%>%
   as.matrix()
 
+#There are some polymeric compounds that made it through that we do not want to consider in any stage of the comparative analysis
+polymer.compounds <- c("glycogen","starch","pectin",
+                       "pullulan","galactan")
+
 #We want to try to directly compare the predictions by CarveMe on matti's models to his experimentally validated growth rates on substrates
 raw_growth_file <- read.csv("Data/Matti_growth-measurements.csv")
 cols <- colnames(raw_growth_file)
 
 #Manually slicing dataset for now but could use cols var + keywords
-sugar_growth_info <- raw_growth_file[,c(11:38)]; colnames(sugar_growth_info) <- sugar_growth_info[1,]
-sugar_growth_info <- sugar_growth_info[-1,]
-acid_growth_info <- raw_growth_file[,c(39:81)]
-colnames(acid_growth_info) <- acid_growth_info[1,]
-acid_growth_info <- acid_growth_info[-1,]
+all_growth_info <- raw_growth_file[,-c(1:10)]
+colnames(all_growth_info) <- all_growth_info[1,]
+all_growth_info <- all_growth_info[-1,]
 
 #Create a heatmap of growth/no growth on sugar + acid compounds as well as heatmap of growth rates
-all_growth_info <- cbind(sugar_growth_info,acid_growth_info)%>%as.data.frame()
 matti.metab.ids <- read.csv("Data/matti_lab_metabolite_ids.csv")
 metab_names <- matti.metab.ids$X%>%as.matrix()
 
 # piv.binary_df <- binary_df%>%pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth/No Growth")
 
-all_growth_info <- all_growth_info%>%mutate(Genome=raw_growth_file$X[-1])%>%select(Genome,everything())
-piv.all_growth <- all_growth_info%>%pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth")%>%filter(Metabolites %in% metab_names, Metabolites != "oxalacetate",Genome %in% hq_genomes)
+all_growth_info <- all_growth_info%>%
+  mutate(Genome=raw_growth_file$X[-1])%>%
+  filter(Genome %in% hq_genomes)%>%
+  select(Genome,everything())
+
+piv.all_growth <- all_growth_info%>%
+  pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth")%>%
+  filter(Metabolites %in% metab_names, Metabolites != "oxalacetate", !Metabolites %in% polymer.compounds, Genome %in% hq_genomes)
 piv.all_growth$Growth <- as.numeric(piv.all_growth$Growth)
 piv.all_growth <- piv.all_growth%>%group_by(Genome)%>%summarise(Metabolites=Metabolites,Growth=Growth,norm_grow=Growth/max(Growth))%>%mutate(norm_grow=case_when(is.na(norm_grow) ~ 0, .default=norm_grow),`Growth/No Growth`=case_when(Growth > 0 ~ 1, .default=0))
 
 piv.all_growth$`Growth/No Growth` <- factor(piv.all_growth$`Growth/No Growth`,levels=c(1,0))
 
-binary_df<-all_growth_info%>%pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth")%>%filter(Metabolites %in% metab_names, Metabolites != "oxalacetate")%>%mutate(`Growth/No Growth`=case_when(Growth > 0 ~ 1, .default=0))%>%select(-Growth)%>%pivot_wider(.,names_from=Metabolites,values_from=`Growth/No Growth`)
+binary_df<-all_growth_info%>%
+  pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth")%>%
+  filter(Metabolites %in% metab_names, Metabolites != "oxalacetate", !Metabolites %in% polymer.compounds, Genome %in% hq_genomes)%>%
+  mutate(`Growth/No Growth`=case_when(Growth > 0 ~ 1, .default=0))%>%
+  select(-Growth)%>%
+  pivot_wider(.,names_from=Metabolites,values_from=`Growth/No Growth`)
 binary_mat<-binary_df%>%select(-Genome)%>%as.matrix()
 
 #We want to randomize the same number of 1 values per genome in the bootstrapped artificial datasets
@@ -1610,82 +1616,31 @@ boot_plot<-ggplot(data = boot_df, aes(x = Agreement))+
   stat_function(fun = dnorm, args = list(mean = mean(boot_df$Agreement), sd = sd(boot_df$Agreement)), xlim = c(mean(boot_df$Agreement) + 2*sd(boot_df$Agreement), max(boot_df$Agreement)), geom = "area", alpha = 0.5, fill = "blue", linewidth = 2)+
   stat_function(fun = dnorm, args = list(mean = mean(boot_df$Agreement), sd = sd(boot_df$Agreement)), xlim = c(min(boot_df$Agreement), mean(boot_df$Agreement) - 2*sd(boot_df$Agreement)), geom = "area", alpha = 0.5, fill = "blue", linewidth = 2)+
   geom_vline(aes(xintercept = mean(Agreement), color = "Bootstrap Mean"), lty = 2, linewidth = 2)+
-  geom_vline(aes(xintercept = 0.736, color = "Model Agreement"), lty = 2, linewidth = 2)+
+  geom_vline(aes(xintercept = 0.755, color = "Model Agreement"), lty = 2, linewidth = 2)+
   scale_color_manual(name = "Statistics", values = c(`Bootstrap Mean` = "blue", `Model Agreement` = "orange"))+
-  scale_x_break(c(0.63,0.725), ticklabels = c(seq(0.59,0.63,0.01),0.73,0.74))+
-  labs(x = "Percent Agreement", y = "Density of Counts", title = "Agreement between Gralka's experimental data and randomized data")+
-  expand_limits(x=c(0.59,0.74))+
+  scale_x_break(c(0.63,0.745), ticklabels = c(seq(0.59,0.63,0.01),0.75,0.76))+
+  labs(x = "Proportion of Agreement", y = "Density of Counts", title = "Agreement between Gralka's experimental data and randomized data")+
+  expand_limits(x=c(0.585,0.76))+
   theme_bw()+
   theme(plot.title = element_text(hjust = 0.5, size = 20), axis.title = element_text(size=18), axis.text = element_text(size=18))
 
-matti.growth.heatmap <- ggplot()+
-  geom_tile(data=piv.all_growth,aes(x=Metabolites,y=Genome,fill=norm_grow))+
-  labs(fill="Growth")+
-  scale_fill_gradient(low="blue",high="red")+
-  theme_bw()+
-  theme(axis.text.x=element_text(angle=270,hjust=0))+
-  custom_theme
-
-matti.binary.heatmap <- ggplot()+
-  geom_tile(data=piv.all_growth,aes(x=Metabolites,y=Genome,fill=`Growth/No Growth`))+
-  scale_fill_manual(labels=c("Growth","No Growth"),values=c("orange","gray90"))+
-  labs(fill="Growth/No Growth")+
-  theme_bw()+
-  theme(axis.text.x=element_text(angle=270,hjust=0))+
-  custom_theme
-
-vitamin.rescue.growth <- read_csv(file="Data/matti_vit_gr_compare.csv")%>%rename(.,`Rescue Growth`=Growth_rates_max,`Growth/No Growth`=Growth)%>%filter(Genome %in% hq_genomes)
-
-single.rescue.growth <- read_csv(file="Data/matti_high_gr_compare.csv")%>%rename(.,`Single Rescue Growth`=Growth_rates_max,`Single Growth/No Growth`=Growth)%>%filter(Genome %in% hq_genomes)
-
-double.rescue.growth <- read_csv(file="Data/matti_dbl_gr_compare.csv")%>%rename(.,`Double Rescue Growth`=Growth_rates_max,`Double Growth/No Growth`=Growth)%>%filter(Genome %in% hq_genomes)
-
-matti.model.growth <- left_join(single.rescue.growth,double.rescue.growth,by=join_by(Genome==Genome,`Tested Compound`==`Tested Compound`))%>%
-  mutate(`Double Rescue Growth`=case_when(
-    is.na(`Double Rescue Growth`) == TRUE ~ 0,
-    .default=`Double Rescue Growth`
-  ),`Double Growth/No Growth`=case_when(
-    is.na(`Double Growth/No Growth`) == TRUE ~ 0,
-    .default=`Double Growth/No Growth`
-  ))%>%
-  mutate(`Rescue Growth`=pmax(`Single Rescue Growth`,`Double Rescue Growth`), `Growth/No Growth`=pmax(`Single Growth/No Growth`,`Double Growth/No Growth`))%>%
-  select(Genome,`Tested Compound`,`Rescue Growth`,`Growth/No Growth`)
-
-matti.model.growth <- matti.model.growth%>%
-  left_join(.,select(matti.metab.ids,c(X,Exchange_rxn)),by=join_by(`Tested Compound`==Exchange_rxn))%>%
-  rename(.,Metabolites=X)%>%
-  select(Genome,`Tested Compound`,Metabolites,everything())
-
-matti.model.growth <- matti.model.growth%>%
-  group_by(Genome)%>%
-  mutate(norm_grow=case_when(
-    max(`Rescue Growth`)>0 ~ `Rescue Growth`/max(`Rescue Growth`),
-    .default=0))
-
-model.binary.heatmap <- ggplot()+
-  geom_tile(data=matti.model.growth,aes(x=as.factor(Metabolites),y=Genome,fill=as.factor(`Growth/No Growth`)))+
-  scale_fill_manual(labels=c("No Growth","Growth"),values=c("gray90","orange"),na.value="gray90")+
-  labs(x="Metabolites", fill="Growth/No Growth")+
-  theme_bw()+
-  theme(axis.text.x=element_text(angle=270,hjust=0,vjust=0.5))+
-  custom_theme
-
-model.growth.heatmap <- ggplot()+
-  geom_tile(data=matti.model.growth,aes(x=Metabolites,y=Genome,fill=norm_grow))+
-  labs(fill="Growth")+
-  scale_fill_gradient(low="blue",high="red")+
-  theme_bw()+
-  theme(axis.text.x=element_text(angle=270,hjust=0,vjust=0.5))+
-  custom_theme
 
 #We also wnat to take data frames regarding agreements of model predictions for growth (binary and numerical) between CarveMe models and experimental data
-agree_df <- read.csv("Data/20241202_matti_agreement_final.csv")
+agree_df <- read.csv("Data/20250212_matti_agreement_final.csv")
+
+#Filter for high quality genomes
+agree_df <- agree_df%>%
+  filter(Genome %in% hq_genomes)
 
 #Temporary line to convert the NAs for two compounds to zeroes
 agree_df <- agree_df%>%mutate(agreement_status=case_when(
   is.na(agreement_status) == TRUE ~ "Perfect Agreement",
   .default=agreement_status
 ))
+
+#Line to convert Pullulan name to something better
+agree_df <- agree_df%>%
+  mutate(Metabolite=case_when(Metabolite == "Pullulan (n=1200 repeat units, alpha-1,4 and alph-1,6 bounds" ~ "Pullulan", .default = Metabolite))
 
 # rename and order values
 
@@ -1708,6 +1663,9 @@ agree_df$agreement_status <- factor(agree_df$agreement_status,
 agree_df <- agree_df%>%mutate(match_key=matti.metab.ids$X[match(agree_df$Metabolite,matti.metab.ids$BiGG_Name)])%>%
   filter(Metabolite != "Oxaloacetate")
 
+#Immediately remove the polymeric compounds that made it through as these were problematic as well
+agree_df <- agree_df%>%
+  filter(!Compound_name %in% polymer.compounds)
 
 #Plot matti's growth rates against the model predicted growth rates
 match.agree.df <- agree_df%>%
@@ -1738,7 +1696,7 @@ growth.Tukey.labels$treatment <- rownames(growth.Tukey.labels)
 numeric.labels <- match(growth.Tukey.labels[,1],unique(growth.Tukey.labels[,1]))
 
 match.agree.df <- match.agree.df%>%mutate(group=growth.Tukey.labels$Letters[match(norm_bin,growth.Tukey.labels$treatment)])
-match.agree.df$group <- factor(match.agree.df$group,levels=c("a","b"))
+match.agree.df$group <- factor(match.agree.df$group)
 
 compare.raw.growth.plot <- ggplot()+
   geom_point(data=match.agree.df,aes(x=vit_gr_rate,y=growth_rate),size=2,alpha=0.5)+
@@ -1756,37 +1714,70 @@ compare.norm.growth.plot <- ggplot()+
 #   custom_theme
 
 binned.norm.compare.plot <- ggplot()+
-  geom_boxplot(data=match.agree.df,aes(x=norm_bin, y=norm_matti,color=group),size=1.5)+
+  geom_boxplot(data=match.agree.df,aes(x=norm_bin, y=norm_matti,color=fct_inorder(group)),size=1.5)+
   labs(x="Model Predicted Growth",y="Matti Predicted Growth",color="Statistical Group",title="Binned Normalized Growth Comparison")+
+  scale_color_manual(values=c("blue","purple","orange"),labels=c("a","b","c"))+
   custom_theme
 
 merged.compare.plot <- (compare.raw.growth.plot | compare.norm.growth.plot) / (binned.norm.compare.plot)
 
-# agg_png(filename="Figures/final-figs/binned-growth-comparison-plot.png",res=400,units="mm",height=150,width=300)
+# agg_png(filename="Figures/final-figs/binned-growth-comparison-plot.png",res=400,units="mm",height=150,width=225)
+
+#There are certain SCFA compounds that we want to exclude because they can potentially diffuse spontatneously
+exclude.compounds <- c("acetate","pyruvate","propionate",
+                       "butyrate","lactate")
+
+#Rearrange the original agreement df by class and classification
+#Also want to reclassify the polymeric compounds and SCFAs as "Excluded"
+agree_df <- agree_df%>%
+  mutate(Higher.Level.Classification=case_when(Compound_name %in% c(polymer.compounds,exclude.compounds) ~ "Excluded",
+                                               .default=Higher.Level.Classification))
+
+#Also fix the Nucleos to become a two liner with a \n so it isn't intrusive
+agree_df <- agree_df%>%
+  mutate(Higher.Level.Classification=case_when(Higher.Level.Classification == "Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
+                                               .default=Higher.Level.Classification))
+
+agree_df <- agree_df%>%
+  arrange(Higher.Level.Classification)
+class <- unique(agree_df$Higher.Level.Classification)
+
+#Create a filtered dataframe that excludes the compounds we plan on excluding for reasons justified in publication
+filter.agree_df <- agree_df%>%
+  filter(!Compound_name %in% polymer.compounds,
+         !Compound_name %in% exclude.compounds)
 
 #I also want to compute the precision, accuracy, and recall of our method compared to matti's experimental data
-sub.agree_df <- agree_df%>%select(c(Genome,Compound,Metabolite,match_key,agreement_status))
+sub.agree_df <- filter.agree_df%>%select(c(Genome,Compound,Compound_name,Metabolite,match_key,agreement_status))
 sub.agree_df <- left_join(sub.agree_df,piv.all_growth,by=join_by(Genome == Genome, match_key == Metabolites))
 
-only_agreements <- sub.agree_df%>%filter(agreement_status %in% c("Perfect Agreement","Single Rescue","Double Rescue"))
-# only_agreements <- left_join(only_agreements,piv.binary_df,by=join_by(Genome == Genome, Compound == Metabolites))
+only_agreements <- sub.agree_df%>%
+  filter(agreement_status %in% c("Perfect Agreement","Single Rescue","Double Rescue"))
 
-comparison.accuracy <- sub.agree_df%>%summarise(accuracy=sum(agreement_status%in%c("Perfect Agreement","Single Rescue","Double Rescue"))/n())
+comparison.accuracy <- sub.agree_df%>%
+  summarise(accuracy=sum(agreement_status%in%c("Perfect Agreement","Single Rescue","Double Rescue"))/n())
 
-true_positives <- only_agreements%>%filter(`Growth/No Growth`==1)%>%summarise(count=n())%>%as.matrix()
-false_positives <- sub.agree_df%>%filter(agreement_status=="Model Growth, Exp. No Growth")%>%summarise(count=n())%>%as.matrix()
-false_negatives <- sub.agree_df%>%filter(agreement_status%in%c("No Growth, Pathway Present","No Growth, No Pathway"))%>%summarise(count=n())%>%as.matrix()
+true_positives <- only_agreements%>%
+  filter(`Growth/No Growth`==1)%>%
+  summarise(count=n())%>%
+  as.matrix()
+
+false_positives <- sub.agree_df%>%
+  filter(agreement_status=="Model Growth, Exp. No Growth")%>%
+  summarise(count=n())%>%
+  as.matrix()
+
+false_negatives <- sub.agree_df%>%
+  filter(agreement_status%in%c("No Growth, Pathway Present","No Growth, No Pathway"))%>%
+  summarise(count=n())%>%
+  as.matrix()
 
 comparison.precision <- true_positives/(true_positives+false_positives)
 
 comparison.recall <- true_positives/(true_positives+false_negatives)
 
-#Rearrange the original agreement df by class and classification
-agree_df <- agree_df%>% arrange(Higher.Level.Classification)
-class <- unique(agree_df$Higher.Level.Classification)
-
 # reorder classes
-class <- class[c(2,1,3,4,5,6)]
+class <- class[c(3,2,4,7,1,6,8,5)]
 
 # making everything pretty be reordering things and providing associated colors
 agree_df$Higher.Level.Classification <- factor(agree_df$Higher.Level.Classification,
@@ -1797,8 +1788,9 @@ color_df <- agree_df%>% filter(Genome == "12B01")%>% arrange(Higher.Level.Classi
 agree_df$Compound <- factor(agree_df$Compound, levels = color_df$Compound)
 
 color_match <- data.frame(class = unique(color_df$Higher.Level.Classification),
-                          color = c("#ac9c3d","#b84c7d","#6881d8",
-                                    "#8650a6","#56ae6c","#ba543d"))
+                          color= 
+                            c("#b65cbf","#75b64b","#747dc9","#c79944",
+                              "#c8577b","#4db49a","#ca5d3f","gray30"))
 
 color_order <- color_match$color[match(color_df$Higher.Level.Classification, color_match$class)]
 
@@ -1808,21 +1800,27 @@ agree_df$simple_name <- agree_df$X[match(agree_df$Compound,agree_df$Exchange_rxn
 agree_df <- agree_df%>%
   mutate(Metabolite=factor(Metabolite, levels=color_df$Metabolite))
 
+#Don't want to plot the polymeric compounds that slipped through so will create a specific plot df
+plot.agree_df <- agree_df%>%
+  filter(!Compound_name %in% polymer.compounds)
+
 matti.agree.heatmap <- ggplot() +
-  geom_tile(data = agree_df, aes(x = Metabolite, y = Genome, fill = agreement_status), color = "white") +
+  geom_tile(data = plot.agree_df, aes(x = Metabolite, y = Genome, fill = agreement_status), color = "white") +
   geom_point(data = color_df, aes(x = Inf, y = Inf, color = Higher.Level.Classification), size = 0) +
-  annotate(geom = "line", x = seq(0.5,20.5,by=0.5), y =-0.01, color = "#ac9c3d", lwd = 2) +
-  annotate(geom = "line", x = seq(20.5,42.5,by=0.5), y =-0.01, color = "#b84c7d", lwd = 2) +
-  annotate(geom = "line", x = seq(42.5,55.5,by=0.5), y =-0.01, color = "#6881d8", lwd = 2) +
-  annotate(geom = "line", x = seq(55.5,56.5,by=0.5), y =-0.01, color = "#8650a6", lwd = 2) +
-  annotate(geom = "line", x = seq(56.5,57.5,by=0.5), y =-0.01, color = "#56ae6c", lwd = 2) +
-  annotate(geom = "line", x = seq(57.5,58.5,by=0.5), y =-0.01, color = "#ba543d", lwd = 2) +
+  annotate(geom = "line", x = seq(0.5,25.5,by=0.5), y =-0.01, color = "#b65cbf", lwd = 2) +
+  annotate(geom = "line", x = seq(25.5,47.5,by=0.5), y =-0.01, color = "#75b64b", lwd = 2) +
+  annotate(geom = "line", x = seq(47.5,58.5,by=0.5), y =-0.01, color = "#747dc9", lwd = 2) +
+  annotate(geom = "line", x = seq(58.5,66.5,by=0.5), y =-0.01, color = "#c79944", lwd = 2) +
+  annotate(geom = "line", x = seq(66.5,70.5,by=0.5), y =-0.01, color = "#c8577b", lwd = 2) +
+  annotate(geom = "line", x = seq(70.5,71.5,by=0.5), y =-0.01, color = "#4db49a", lwd = 2) +
+  annotate(geom = "line", x = seq(71.5,72.5,by=0.5), y =-0.01, color = "#ca5d3f", lwd = 2) +
+  annotate(geom = "line", x = seq(72.5,77.5,by=0.5), y =-0.01, color = "gray30", lwd = 2) +
   labs(x = "Compound", y = "Genome", fill = "Test Result", color = "Compound Classificaiton") +
   scale_fill_manual(values = c("#84c7e3","#4995b9","#356173",
                                "grey90","#c17894","#d44290")) +
-  scale_color_manual(values = c("#ac9c3d","#b84c7d","#6881d8",
-                                "#8650a6","#56ae6c","#ba543d")) +
-  coord_cartesian(clip = "off", xlim = c(1,58), ylim = c(1,146)) +
+  scale_color_manual(values = c("#b65cbf","#75b64b","#747dc9","#c79944",
+                                "#c8577b","#4db49a","#ca5d3f","gray30")) +
+  coord_cartesian(clip = "off", xlim = c(1,77), ylim = c(1,146)) +
   theme(panel.background = element_blank(),
         panel.border = element_rect(fill = NA, color = "black"),
         axis.text.x = element_text(size = 7, angle = -90,hjust = 0,vjust = 0.6),
@@ -1905,29 +1903,6 @@ plot.binary.heatmap <- ggplot()+
 # agg_png(filename="Figures/final-figs/matti-growth-test-multipanel-plot.png",res=400,units="mm",height=350,width=700)
 # wrap_plots(plot.binary.heatmap, ex.agree.heatmap, matti.agree.heatmap, nrow=1,ncol=3)
 # dev.off()
-
-#Identify which metabolites are present in our set of classified metabolites
-match_acids <- c()
-for (i in 1:length(colnames(acid_growth_info))){
-  curr_search <- colnames(acid_growth_info)[i]
-  matches <- grep(curr_search,class_file$Metabolite,ignore.case=TRUE)
-  if (is_empty(matches)==TRUE){
-    print(paste("Metabolite",curr_search,"has no matches!"))
-    next
-  }
-  match_acids <- rbind(match_acids,as.matrix(class_file[matches,]))
-}
-
-match_sugars <- c()
-for (i in 1:length(colnames(sugar_growth_info))){
-  curr_search <- colnames(sugar_growth_info)[i]
-  matches <- grep(curr_search,class_file$Metabolite,ignore.case=TRUE)
-  if (is_empty(matches)==TRUE){
-    print(paste("Metabolite",curr_search,"has no matches!"))
-    next
-  }
-  match_sugars <- rbind(match_sugars,as.matrix(class_file[matches,]))
-}
 
 
 ```
@@ -2342,7 +2317,7 @@ plot(flux_bubble_plot)
 
 knitr::include_graphics("Figures/final-figs/K6-flux-bubble-plot.png")
 
-knitr::include_graphics("Figures/final-figs/consensus90-sensitivity-bubble-plot.png")
+knitr::include_graphics("Figures/final-figs/consensus90-flux-bubble-plot.png")
 
 ```
 

@@ -32,37 +32,12 @@ library(ggfortify)
 library(ggtext)
 library(ggbreak)
 library(png)
+
 #Set a random seed
 set.seed(123)
-#Make/call functions
 
-#We need to do some bootstrapping analysis per a request from Cameron. I think what we need to do is bootstrap the genomes in each cluster and then compute sums and relative abundances -> get a CI on relative abundance per cluster per region -> using functions from Ben Temperton
-bootstrap_sum_pi <- function(data, func, size=1000){
-  bs_sample = sample(data, size=size, replace=TRUE)
-  do.call(func, list(x=bs_sample))
-}
-
-generate_bootstrap_replicates <- function(data, func, n=1000, size=1000){
-  replicate(n, do.call(bootstrap_sum_pi, list(data=data, func=func, size=size)))
-}
-
-#We need to perform many iterations of clustering and optimize according to an objective function, so we will use this pre-built helper function to look at the distance between cluster means
-clusterMeanDist <- function(clusters){
-  cluster.means = c()
-  
-  for(c in unique(clusters)){
-    temp.members <- which(clusters == c)
-    
-    if(length(temp.members) > 1){
-      temp.dist <- som.dist[temp.members,]
-      temp.dist <- temp.dist[,temp.members]
-      cluster.means <- append(cluster.means, mean(temp.dist))
-    }else(cluster.means <- append(cluster.means,0))
-  }
-  
-  return(mean(cluster.means))
-  
-}
+#Call functions
+source(file="CarveWe_functions.R")
 
 ```
 
@@ -682,86 +657,7 @@ som.proto.dist_plot <- ggplot(data=scaled.piv.df,aes(x=scaled_flux,y=as.factor(c
   labs(x="Growth Sensitivity",y="Cluster")+
   custom_theme
 
-plot_df = pivot_df%>%
-  nest(data=-nodes)%>%
-  mutate(plot = map2(data, nodes,
-                     ~ ggplot(.x) + theme_void() +
-                       aes(x = metab_class, y = scaled_flux, fill = metab_class) +
-                       geom_bar(stat = "identity", show.legend = FALSE, width = 1) +
-                       coord_polar() +
-                       scale_fill_manual(values = c("#ce4d3e",
-                                                    "#66b045",
-                                                    "#b256c2",
-                                                    "#9a963f",
-                                                    "#6569c8",
-                                                    "#c88441",
-                                                    "#5c9cd2",
-                                                    "#d14788",
-                                                    "#4fa67c",
-                                                    "#bf82c1",
-                                                    "#bb6271"))))
-
-plot_df$column_names <- rep(c(1:gridsize,seq(0.5,gridsize-0.5, by = 1)), times = gridsize)[1:gridsize^2]
-plot_df$row_names <- rep(seq(0.5,0.5*gridsize, by = 0.5), each = gridsize)
-
-plot_annotations = plot_df%>% 
-  mutate(annotation = pmap(list(column_names, row_names, plot),
-                           ~ annotation_custom(ggplotGrob(..3),
-                                               xmin = ..1-0.525, xmax = ..1+0.525,
-                                               ymin = ..2-0.525, ymax = ..2+0.525)))%>%
-  pull(annotation)
-
-
-grid_plot <- ggplot() + 
-  geom_point(data = classifiers_df, aes(x = column_names, y = row_names, color = as.factor(cluster)),
-             fill = "white", size = 30, pch = 21, stroke = 4) +
-  geom_col(data = pivot_df,
-           aes(0,0, fill = metab_class)) +
-  plot_annotations + coord_equal() +
-  theme(axis.title = element_blank(),
-        axis.text = element_blank(),
-        axis.line = element_blank(),
-        axis.ticks = element_blank(),
-        panel.background = element_blank(),
-        legend.key = element_blank(),
-        legend.position = "bottom",
-        legend.box = "horizontal",
-        plot.margin = ggplot2::margin(5,5,5,5)) + 
-  labs(color="Cluster",fill = "Metabolite Class") + 
-  guides(fill = guide_legend(ncol = 2, title.position = "top", title.hjust = 0.5)) +
-  scale_fill_manual(values = c("#ce4d3e",
-                               "#66b045",
-                               "#b256c2",
-                               "#9a963f",
-                               "#6569c8",
-                               "#c88441",
-                               "#5c9cd2",
-                               "#d14788",
-                               "#4fa67c",
-                               "#bf82c1",
-                               "#bb6271")) +
-  scale_color_manual(values = c("#a0a052",
-                                "#6c63d7",
-                                "#a0b533",
-                                "#c957ca",
-                                "#5db855",
-                                "#98459e",
-                                "#d89d37",
-                                "#7a93dd",
-                                "#c9532a",
-                                "#46aed7",
-                                "#d6445a",
-                                "#50b593",
-                                "#d1438d",
-                                "#4c7937",
-                                "#c285de",
-                                "#91682d",
-                                "#625fa3",
-                                "#dd8a68",
-                                "#d883af",
-                                "#a44d61"))+
-  custom_theme
-
+#Visualize the final SOM grid itself with individual nodes colored by cluster assignment. NAs assigned to gray
 som_grid_plot <- ggplot() + 
   geom_point(data = classifiers_df, aes(x = column_names, y = row_names, fill=as.factor(cluster)), size = 18, pch = 21, stroke = 1)+
   theme(axis.title = element_blank(),
@@ -807,11 +703,11 @@ group.metab.df <- all.metab.df%>%group_by(clusters,metabolite_class)%>%summarise
 group.metab.df$clusters <- as.factor(group.metab.df$clusters)
 
 #Chunk of code to change names of metabolite classes to help with plotting
-# group.metab.df <- group.metab.df%>%mutate(metabolite_class=case_when(
-#   metabolite_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
-#   metabolite_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
-#   .default=metabolite_class
-# ))
+group.metab.df <- group.metab.df%>%mutate(metabolite_class=case_when(
+  metabolite_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
+  metabolite_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
+  .default=metabolite_class
+))
 
 metab_order <- group.metab.df%>% group_by(metabolite_class)%>%
   summarise(rank = mean(abs(means), na.rm = TRUE))%>% arrange(desc(rank))
@@ -848,28 +744,7 @@ cluster_plot <- ggplot() +
         panel.grid.major.y = element_line(color = "grey90", linewidth = 0.25)) +
   guides(fill = guide_legend(title.position = "top", title.hjust = 0.5, nrow = 1))
 
-
-all.dat.clust.plot <- ggplot() +
-  geom_hline(yintercept = 0, lty = 2) +
-  geom_bar(data = group.metab.df, aes(y = means, x = clusters, fill = clusters),
-           stat = "identity") +
-  geom_errorbar(data = group.metab.df, aes(x = clusters,ymin = means-sds, ymax = means+sds),
-                width = 0.2) +
-  facet_wrap(vars(metabolite_class),scales="free_y") +
-  labs(x = "", y= "Growth Limitation", fill = "Cluster") +
-  theme(panel.background = element_blank(),
-        panel.border = element_rect(fill = NA, color = "black"),
-        axis.text = element_text(size = 16),
-        axis.title = element_text(size =16),
-        strip.text = element_text(size = 16),
-        legend.text = element_text(size = 16),
-        legend.title = element_text(size = 16),
-        strip.background = element_blank(),
-        legend.direction = "horizontal",
-        legend.position ="bottom",
-        panel.grid.major.y = element_line(color = "grey90", linewidth = 0.25)) +
-  guides(fill = guide_legend(title.position = "top", title.hjust = 0.5, nrow = 1))
-
+#Subset the data for specific classes that showed pronounced growth sensitivity reduction in at least one of the SOM clusters
 sub_df <- new_df%>%filter(!metabolite_class%in%c("Alcohol","Amines/Amides","Ketones/Aldehydes","Organic Sulfur","Phospholipids/Fatty Acids/Triglycerides"))%>%mutate(metabolite_class=case_when(
   metabolite_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
   .default=metabolite_class
@@ -900,96 +775,6 @@ flux_bubble_plot <- ggplot() +
   guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(3.5, "in"),
                                ticks.colour = "black", frame.colour = "black", order=2), size=guide_legend(title.position="top",title.hjust=0.5, order=3), color=guide_legend(nrow=2, title.position="top", title.hjust=0.5, override.aes=list(size=7.5,pch=15), order=1))
 
-#We also want to try to make a version where we only display the average relative flux values for each 
-#Create a mean df from the classifiers df
-all_means <- c()
-for (i in 1:num_clusters){
-  curr_means <- filter(classifiers_df,cluster==i)%>%select(!c(nodes,cluster,row_names,column_names))%>%colMeans(.)
-  all_means <- rbind(all_means,curr_means)
-}
-mean_df <- as.data.frame(all_means,row.names = FALSE)
-
-mean_df$nodes <- c(1:num_clusters)
-mean_df$row_names <- rep(c(1:(num_clusters/2)),times=2)
-mean_df$column_names <- rep(c(1:2),each=num_clusters/2)
-mean_df$cluster <- c(1:num_clusters)
-
-#Optional block of code for if you want to threshold
-
-mean_df <- mean_df%>%select(.,c(nodes,cluster,row_names,column_names),everything())
-
-pivot.mean_df <- mean_df%>% pivot_longer(-c(nodes, cluster, row_names, column_names),
-                                          names_to = "metab_class", values_to = "scaled_flux")%>%
-  group_by(nodes)%>% mutate(min = min(scaled_flux),
-                             max = max(scaled_flux),
-                             polar_size = (scaled_flux)/(abs(max)+abs(min)))
-
-pivot.mean_df$metabolite <- factor(pivot.mean_df$metab_class, levels = unique(pivot.mean_df$metab_class))
-
-plot_df = pivot.mean_df%>%
-  nest(data=-nodes)%>%
-  mutate(plot = map2(data, nodes,
-                     ~ ggplot(.x) + theme_void() +
-                       aes(x = metab_class, y = polar_size, fill = metab_class) +
-                       geom_bar(stat = "identity", show.legend = FALSE, width = 1) +
-                       coord_polar() +
-                       scale_fill_manual(values = c("#7663cf",
-                                                    "#8db43b",
-                                                    "#c851b1",
-                                                    "#55bc63",
-                                                    "#d54767",
-                                                    "#4fbeae",
-                                                    "#d15236",
-                                                    "#588dcc",
-                                                    "#d2a23a",
-                                                    "#a879bf",
-                                                    "#458149",
-                                                    "#bd6484",
-                                                    "#89883f",
-                                                    "#ba7648"))))
-
-plot_df$row_names <- rep(c(1:(num_clusters/2)),times=2)
-plot_df$column_names <- rep(c(1:2),each=num_clusters/2)
-
-plot_annotations = plot_df%>% 
-  mutate(annotation = pmap(list(column_names, row_names, plot),
-                           ~ annotation_custom(ggplotGrob(..3),
-                                               xmin = ..1-0.5, xmax = ..1+0.5,
-                                               ymin = ..2-0.5, ymax = ..2+0.5)))%>%
-  pull(annotation)
-
-
-flux_abund_plot <- ggplot() + 
-  geom_point(data = mean_df[,1:4], aes(x = column_names, y = row_names,color=as.factor(cluster)),
-             pch = 21, size = 50,stroke=2) +
-  geom_col(data = pivot.mean_df,
-           aes(0,0, fill = metab_class)) +
-  coord_cartesian(expand = 10) +
-  expand_limits(x=5,y=5) +
-  plot_annotations + coord_equal() +
-  theme(axis.title = element_blank(),
-        axis.text = element_blank(),
-        axis.line = element_blank(),
-        axis.ticks = element_blank(),
-        panel.background = element_blank(),
-        legend.position = "bottom",
-        legend.box = "horizontal",
-        plot.margin = ggplot2::margin(5,5,5,5)) +
-  scale_fill_manual(values = c("#7663cf",
-                               "#8db43b",
-                               "#c851b1",
-                               "#55bc63",
-                               "#d54767",
-                               "#4fbeae",
-                               "#d15236",
-                               "#588dcc",
-                               "#d2a23a",
-                               "#a879bf",
-                               "#458149",
-                               "#bd6484",
-                               "#89883f",
-                               "#ba7648")) + labs(color="Cluster",fill = "Metabolite Class") + 
-  guides(fill = guide_legend(ncol = 2, title.position = "top", title.hjust = 0.5),color=guide_legend(title.position="top",override.aes=list(size=20)))
 
 ```
 
@@ -1040,12 +825,6 @@ for (i in 1:num_clusters){
   phylo_mat[i,phylo_cols] <- curr_phylo
 }
 phylo_df <- as.data.frame(phylo_mat,row.names = FALSE)%>%mutate(.,cluster=c(1:num_clusters))%>%select(cluster,everything())
-
-# ggplot(filter(phylo_df,cluster==1),aes(x="",y=value,fill=group))+
-#   geom_col(color="black")+
-#   geom_text(aes(x=1.35,label=value),position=position_stack(vjust=0.5))+
-#   coord_polar(theta="y")+
-#   theme_void()
 
 #Now we want to plot all the pie charts together
 phylo_df$nodes <- c(1:num_clusters)
@@ -1164,8 +943,6 @@ phylo_grid_plot <- ggplot() +
                                "#bca262",
                                "gray")) 
 
-# print("Figure: ")
-# plot(phylo_grid_plot)
 
 #Try re-plotting this with one bar per phylogenetic order per cluster
 phylo_stacked_abund_plot <- ggplot(pivot_df, aes(y = Order, x = perc, fill = as.factor(cluster))) +
@@ -1294,18 +1071,12 @@ print(kruskal.out)
 
 #Kruskal-Wallis is good with extremely strong p-value, suggesting differences in dCUB distributions, and our data is skewed normal so we will proceed with paired tests using Tukey's HSD
 #Compute a tukey test on the samples grouped by cluster to see if any clusters are significantly different from one another
-model=lm(growth_df$dCUB ~ growth_df$clusters)
-ANOVA=aov(model)
-
-growth.tukey <- TukeyHSD(x=ANOVA,'growth_df$clusters',conf.level=0.95)
-Tukey.levels <- growth.tukey[["growth_df$clusters"]][,4]
-growth.Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
-growth.Tukey.labels$treatment <- as.numeric(rownames(growth.Tukey.labels))
-growth.Tukey.labels <- growth.Tukey.labels[order(growth.Tukey.labels$treatment),]
-numeric.labels <- match(growth.Tukey.labels[,1],unique(growth.Tukey.labels[,1]))
+vars <- c("dCUB","clusters")
+growth.ANOVA_list <- ANOVA.test(growth_df,vars)
+growth_df <- growth.ANOVA_list[[1]]; tukey.labels <- growth.ANOVA_list[[2]]; numeric.labels <- growth.ANOVA_list[[3]]
 
 growth_df <- growth_df%>%mutate(group=numeric.labels[clusters])
-
+  
 #We'd also like to do a comparison between the flux and growth rates by cluster to see if differentiation among slow clusters could be flux driven
 avg_df <- group.metab.df%>%group_by(clusters)%>%summarise(flux_mean=mean(means))
 avg_df <- avg_df%>%mutate(.,growth_mean=growth_df%>%group_by(clusters)%>%summarise(mean=mean(dCUB))%>%select(mean)%>%as.matrix()%>%as.numeric())
@@ -1315,7 +1086,7 @@ growth_violin_plot <- ggplot(growth_df,aes(x=as.factor(clusters),y=dCUB,color=as
   geom_violin(width=1)+
   stat_summary(fun="mean",geom="crossbar",color="black")+
   labs(x="Clusters")+
-  scale_color_manual(name="Group",values=c("#619CFF","#F8766D","#00BA38","yellowgreen"),labels=unique(growth.Tukey.labels[,1]))+
+  scale_color_manual(name="Group",values=c("#619CFF","#F8766D","#00BA38","yellowgreen"),labels=unique(tukey.labels[,1]))+
   geom_point()+
   custom_theme+
   theme_bw()+
@@ -1331,7 +1102,7 @@ flux_versus_growth_plot <- ggplot()+
   theme_bw()
 
 #Different formulation of fuill data phylogeny plot where we show a ranked abundance curve of phylogeny broken out by cluster, colored by growth Tukey groups
-per.clust.phylo.df <- pivot_df%>%mutate(tukey_group=growth.Tukey.labels$Letters[match(cluster,growth.Tukey.labels$treatment)])
+per.clust.phylo.df <- pivot_df%>%mutate(tukey_group=tukey.labels$Letters[match(cluster,tukey.labels$treatment)])
 per.clust.levels <- per.clust.phylo.df%>%filter(cluster==1)%>%arrange(desc(perc))%>%ungroup()%>%select(Group)%>%as.matrix()%>%as.vector()
 
 per.clust.phylo.df <- per.clust.phylo.df%>%mutate(Group=factor(Group,levels=per.clust.levels))
@@ -1365,16 +1136,7 @@ classifiers_df$column_names <- rep(1:gridsize,each = gridsize)
 
 classifiers_df <- classifiers_df%>%select(.,c(nodes,cluster,row_names,column_names),everything())
 
-#Create a dataframe object that will draw the boxes around the cluster nodes
-cluster_squares_df <- data.frame(cluster=c(1:num_clusters))
-cluster_squares_df <- mutate(cluster_squares_df,xmin=0,xmax=0,ymin=0,ymax=0)
-for (i in 1:num_clusters){
-  curr_clust <- i
-  curr_points <- filter(classifiers_df,cluster==i)%>%select(row_names,column_names)
-  xmin=min(curr_points$column_names -0.4); xmax=max(curr_points$column_names +0.4); ymin=min(curr_points$row_names -0.4); ymax=max(curr_points$row_names +0.4)
-  cluster_squares_df[i,c("xmin","xmax","ymin","ymax")] <- c(xmin,xmax,ymin,ymax)
-}
-
+#Create a dataframe containing the genome/cluster pairs
 clust_df <- cbind(genome_IDs,majority_clust)%>%as.data.frame()
 colnames(clust_df) <- c("value","clusters")
 
@@ -1391,9 +1153,17 @@ grow_df <- adjusted_dat%>%
   filter(metab_class=="Growth")%>%group_by(genome,model,X)%>%
   mutate(growth_req=case_when(averaged_flux/orig_flux<=1 ~ (2*(1-averaged_flux/orig_flux)),
                               averaged_flux/orig_flux>1 ~ 0))%>%
-  reframe(growth_req=growth_req)%>%select(-model)
+  reframe(growth_req=growth_req)%>%
+  select(-model)
 
 colnames(grow_df) <- c("genome","metabolite_class","growth_req")
+
+grow_df <- grow_df%>%
+  mutate(metabolite_class=case_when(
+  metabolite_class=="Nucleobases/Nucleosides/Nucleotides/Derivatives" ~ "Nucleobases/Nucleosides/\nNucleotides/Derivatives",
+  metabolite_class=="Phospholipids/Fatty Acids/Triglycerides" ~ "Phospholipids/Fatty\nAcids/Triglycerides",
+  .default=metabolite_class
+))
 
 clust_matches <- match(grow_df$genome,clust_df$value)
 grow_df <- grow_df%>%
@@ -1430,40 +1200,6 @@ out_grow <- ggplot(sum_grow, aes(y = metabolite_class, x = avg_grow_req, fill = 
 
 sum_grow <- sum_grow%>% group_by(metabolite_class)%>%
   mutate(scaled_grow = ((avg_grow_req-min(avg_grow_req))/(max(avg_grow_req)-min(avg_grow_req)))) 
-#Raw plot of the growth sensitivity on [0,1] scale for all compound classes
-growth_dep_plot <- ggplot(sum_grow, aes(x = cluster, y = metabolite_class, size = scaled_grow, fill = avg_grow_req)) + 
-  geom_point(pch = 21) + scale_size_continuous(guide = "none", range = c(2,10)) +
-  scale_fill_viridis_c() +
-  theme(panel.background = element_blank(),
-        panel.border = element_rect(fill = NA, color = "black"),
-        axis.title.y = element_blank(),
-        axis.text = element_text(size = 12),
-        axis.title.x = element_text(size = 12),
-        legend.text = element_text(size  =12),
-        legend.title = element_text(size  =12),
-        legend.position = "bottom",
-        legend.direction = "horizontal") +
-  guides(fill = guide_colorbar(title.position = "top", title.hjust = 0.5, barwidth = unit(3.5, "in"),
-                               ticks.colour = "black", frame.colour = "black")) +
-  labs(x = "Cluster", fill = "Average Growth Sensitivity")
-
-# compare plot
-piv.mean_df <- mean_df%>% select(-c(nodes,row_names,column_names))%>% pivot_longer(-cluster, names_to = "metabolite_class", values_to = "flux")
-piv.mean_df$cluster <- factor(piv.mean_df$cluster)
-comb_df <- full_join(sum_grow, piv.mean_df)
-
-# plot regression lines
-flux_versus_dep_plot <- ggplot(comb_df, aes(x = flux, y = avg_grow_req, color = cluster)) +
-  geom_point(size = 4, alpha = 0.75) + facet_wrap(~metabolite_class, scales = "free_x") +
-  labs(color = "Metabolite Class", x = "Growth Sensitivity", y = "Growth Sensitivity") +
-  theme(panel.background = element_blank(), panel.border = element_rect(fill = NA, color = "black"),
-        strip.background = element_blank(),
-        strip.text = element_text(size = 10),
-        legend.key = element_blank(),
-        legend.position = "bottom",
-        legend.direction = "horizontal") + 
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5, nrow = 1))
-
 #New version of bubble plot that tries to combine information from several plots. Want to try the metabolite dependence values as color and mean scaled fluxes as size
 sum_grow$mean_flux <- new_df%>%ungroup%>%filter(metabolite_class%in%unique(sum_grow$metabolite_class))%>%select(means)%>%as.matrix()%>%as.numeric()
 sum_grow$scaled_flux <- new_df%>%ungroup%>%filter(metabolite_class%in%unique(sum_grow$metabolite_class))%>%select(scaled_flux)%>%as.matrix()%>%as.numeric()
@@ -1686,16 +1422,11 @@ match.agree.df <- agree_df%>%
          raw_bin=cut(vit_gr_rate,seq(0,max(vit_gr_rate),max(vit_gr_rate)/4),right=TRUE,include.loweest=TRUE))
 
 #Perform significance testing of the normalized binned data using a mutli-distribution Tukey test
-model=lm(match.agree.df$norm_matti ~ match.agree.df$norm_bin)
-ANOVA=aov(model)
+vars <- c("norm_matti","norm_bin")
+matti.ANOVA_list <- ANOVA.test(match.agree.df,vars)
+match.agree.df <- matti.ANOVA_list[[1]]; tukey.labels <- matti.ANOVA_list[[2]]; numeric.labels <- matti.ANOVA_list[[3]]
 
-TUKEY <- TukeyHSD(x=ANOVA,'match.agree.df$norm_bin',conf.level=0.95)
-Tukey.levels <- TUKEY[["match.agree.df$norm_bin"]][,4]
-growth.Tukey.labels <- data.frame(multcompLetters(Tukey.levels)['Letters'])
-growth.Tukey.labels$treatment <- rownames(growth.Tukey.labels)
-numeric.labels <- match(growth.Tukey.labels[,1],unique(growth.Tukey.labels[,1]))
-
-match.agree.df <- match.agree.df%>%mutate(group=growth.Tukey.labels$Letters[match(norm_bin,growth.Tukey.labels$treatment)])
+match.agree.df <- match.agree.df%>%mutate(group=tukey.labels$Letters[match(norm_bin,tukey.labels$treatment)])
 match.agree.df$group <- factor(match.agree.df$group)
 
 compare.raw.growth.plot <- ggplot()+
@@ -1707,11 +1438,6 @@ compare.norm.growth.plot <- ggplot()+
   geom_point(data=match.agree.df,aes(x=norm_model,y=norm_matti),size=2,alpha=0.5)+
   labs(x="Model Predicted Growth",y="Matti Predicted Growth",title="Genome Normalized Growth Comparison")+
   custom_theme
-
-# binned.raw.compare.plot <- ggplot()+
-#   geom_boxplot(data=match.agree.df,aes(x=raw_bin, y=growth_rate))+
-#   labs(x="Model Predicted Growth",y="Matti Predicted Growth",title="Binned Raw Growth Comparison")+
-#   custom_theme
 
 binned.norm.compare.plot <- ggplot()+
   geom_boxplot(data=match.agree.df,aes(x=norm_bin, y=norm_matti,color=fct_inorder(group)),size=1.5)+
@@ -1751,30 +1477,10 @@ filter.agree_df <- agree_df%>%
 sub.agree_df <- filter.agree_df%>%select(c(Genome,Compound,Compound_name,Metabolite,match_key,agreement_status))
 sub.agree_df <- left_join(sub.agree_df,piv.all_growth,by=join_by(Genome == Genome, match_key == Metabolites))
 
-only_agreements <- sub.agree_df%>%
-  filter(agreement_status %in% c("Perfect Agreement","Single Rescue","Double Rescue"))
+#We'll use a helper function to compute the three numerical comparisons
+comparisons <- compute.comparisons(sub.agree_df)
 
-comparison.accuracy <- sub.agree_df%>%
-  summarise(accuracy=sum(agreement_status%in%c("Perfect Agreement","Single Rescue","Double Rescue"))/n())
-
-true_positives <- only_agreements%>%
-  filter(`Growth/No Growth`==1)%>%
-  summarise(count=n())%>%
-  as.matrix()
-
-false_positives <- sub.agree_df%>%
-  filter(agreement_status=="Model Growth, Exp. No Growth")%>%
-  summarise(count=n())%>%
-  as.matrix()
-
-false_negatives <- sub.agree_df%>%
-  filter(agreement_status%in%c("No Growth, Pathway Present","No Growth, No Pathway"))%>%
-  summarise(count=n())%>%
-  as.matrix()
-
-comparison.precision <- true_positives/(true_positives+false_positives)
-
-comparison.recall <- true_positives/(true_positives+false_negatives)
+comparison.accuracy <- comparisons[1]; comparison.precision <- comparisons[2]; comparison.recall <- comparisons[3]
 
 # reorder classes
 class <- class[c(3,2,4,7,1,6,8,5)]
@@ -1978,33 +1684,6 @@ regional_rpkm$SuperRegion <- factor(regional_rpkm$SuperRegion,levels=c("Estuarin
 regional_rpkm$Region <- factor(regional_rpkm$Region,levels=unique(regional_rpkm$Region))
 regional_rpkm <- regional_rpkm%>%arrange(SuperRegion)
 
-# ggplot(regional_rpkm,aes(x=Region,y=rel_rpkm,fill=cluster))+
-#   geom_bar(position="stack",stat="identity")+
-#   theme_bw()+
-#   theme(axis.text.x=element_text(size=12,angle=45,hjust=1))+
-#   scale_fill_manual(values=c("#cc5a43","#7764cb","#75ab3d","#c062bb","#54a77a","#c75980","#b68f40","#678ecd"))
-
-#Now we want to look by individual sample
-#Bootstrap the data by Sample
-# set.seed(123)
-# 
-# sample.boot_df <- rpkm_vals%>%group_by(cluster,Sample)%>%reframe(Sample=unique(Sample))%>%filter(!is.na(cluster),!is.na(Sample))%>%mutate(boot_mean=NA,lb_boot=NA,ub_boot=NA)
-# for (j in 1:length(unique(sample.boot_df$Sample))){
-#   curr_region=unique(sample.boot_df$Sample)[j]
-#   bootstrapped_sums <- matrix(data=NA,nrow=1000,ncol=num_clusters)
-#   for (i in 1:num_clusters){
-#     clust_rpkm <- rpkm_vals%>%filter(cluster==i,Sample==curr_region)%>%select(rpkm)%>%as.matrix()%>%as.numeric()
-#     bootstrapped_sums[,i] <- generate_bootstrap_replicates(clust_rpkm,sum,n=1000,size=1000)
-#   }
-#   bootstrapped_rel_rpkm <- bootstrapped_sums/rowSums(bootstrapped_sums)
-#   quantiles <- apply(bootstrapped_rel_rpkm,2,quantile,probs=c(2.5,97.5)/100)
-#   means <- colMeans(bootstrapped_rel_rpkm)
-#   sample.boot_df$lb_boot[which(sample.boot_df$Sample==curr_region)] <- quantiles[1,]
-#   sample.boot_df$ub_boot[which(sample.boot_df$Sample==curr_region)] <- quantiles[2,]
-#   sample.boot_df$boot_mean[which(sample.boot_df$Sample==curr_region)] <- means
-# }
-# sample.boot_df$Sample <- factor(sample.boot_df$Sample,levels=c("Estuarine","Coastal","Oligotrophic Seas","Oligotrophic Open Ocean","Southern Ocean"))
-
 
 sample.som_rpkm <- som_rpkm%>%
   mutate(SuperRegion=case_when(
@@ -2017,11 +1696,6 @@ sample.som_rpkm <- som_rpkm%>%
 sample.som_rpkm$SuperRegion <- factor(sample.som_rpkm$SuperRegion,levels=c("Estuarine","Coastal","Oligotrophic Seas","Oligotrophic Open Ocean","Southern Ocean"))
 sample.som_rpkm <- sample.som_rpkm%>%arrange(SuperRegion)
 sample.som_rpkm$Sample <- factor(sample.som_rpkm$Sample,levels=unique(sample.som_rpkm$Sample))
-
-# ggplot(sample.som_rpkm,aes(x=Sample,y=rel_rpkm,fill=cluster))+
-#   geom_bar(position="stack",stat="identity")+
-#   scale_fill_manual(values=c("#cc5a43","#7764cb","#75ab3d","#c062bb","#54a77a","#c75980","#b68f40","#678ecd"))+
-#   theme_bw()
 
 #Try clustering the stations within each regime and then reorder by regime and clustering order
 all_order <- c()
@@ -2087,7 +1761,7 @@ all.abund.plot3 <- ggplot(filter(sample.som_rpkm,SuperRegion%in%c("Oligotrophic 
   guides(color="none", fill=guide_legend())+
   custom_theme
 
-# (all.abund.plot1 | all.abund.plot2 | all.abund.plot3) + plot_layout(widths=c(1,2,1),guides="collect")
+(all.abund.plot1 | all.abund.plot2 | all.abund.plot3) + plot_layout(widths=c(1,2,1),guides="collect")
 
 
 #Bootstrap the data by Region to get bar plots
@@ -2122,7 +1796,6 @@ regional.abund.plot <- ggplot(region.boot_df,aes(x=cluster,y=boot_mean,fill=grow
     facet_wrap(~Region)+
     custom_theme+
     labs(x="Cluster",y="Relative Bootstrapped RPKM",fill="Cluster")
-
 
 
 #Bootstrap the data by SuperRegion to get bar plots
@@ -2273,7 +1946,7 @@ superregion.rpkm.table <- boot_df%>%select(cluster,SuperRegion,boot_mean)%>%pivo
 colnames(superregion.rpkm.table) <- c("Regime",paste("Cluster",c(1:num_clusters)))
 
 #Save the p-values from the growth distribution comparisons
-tukey_df <- growth.tukey[["growth_df$clusters"]]%>%as.data.frame()
+tukey_df <- growth.ANOVA_list[4][[1]]$col2%>%as.data.frame()
 tukey_df <- tukey_df%>%mutate(names=rownames(tukey_df))
 
 p.value.table <- tukey_df%>%select(names,"p adj")

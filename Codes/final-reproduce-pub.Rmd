@@ -45,12 +45,12 @@ source(file="CarveWe_functions.R")
 
 ```{r reading data, echo=FALSE,include=FALSE}
 #We will attempt to pre-merge the metabolites by metabolite class to see how this impacts SOMs and results
-class_file <- read.csv("Data/classified_metabolites.csv")
+class_file <- read.csv("Publication_Data/classified_metabolites.csv")
 
 #Try pre-filtering out Inorganics as well since they dominate the total flux by fraction
 class_file <- class_file%>%distinct(Metabolite,.keep_all=TRUE)%>%filter(!Higher.Level.Classification%in%c("Other","Inorganic"))
 
-load(file="Data/new-growth50-test-data_all-cats.Rdata")
+load(file="Publication_Data/new-growth50-test-data_all-cats.Rdata")
 
 #Fix some string display issues with metabolite class names
 remove_classes <- unique(all_dat$X)[-12]; metab_classes <- unique(all_dat$metab_class)[-c(7,8,12)]
@@ -85,7 +85,7 @@ adjusted_dat <- adjusted_dat%>%
   filter(!is.na(orig_flux))
 
 #We are now filtering out the archaeal genomes from the dataset and will do that by loading a pre-determined list of the high quality bacterial genomes and filtering the data frame
-load("Data/hq-bacterial-genomes.RData")
+load("Publication_Data/hq-bacterial-genomes.RData")
 adjusted_dat <- adjusted_dat%>%
   filter(genome%in%bacterial.hq.genomes)
 
@@ -156,7 +156,7 @@ set.seed(123)
 # som.model <- som(metabolite_matrix,grid=som.grid,rlen=1500,alpha=c(0.025,0.01))
 
 #Comment this line out if you plan to generate a map de novo
-load("Data/final-kohonen-som.RData")
+load("Publication_Data/final-kohonen-som.RData")
 
 #This has been an issue but we need to set the specific seed present *after* running the original SOM model to be able to reproduce the exact results
 .Random.seed <- good.seed
@@ -170,7 +170,7 @@ som.dist <- as.matrix(dist(carve.som))
 try.k <- 2:20
 
 #Load the pre-saved cluster data
-load("Data/final-som-clusters.RData")
+load("Publication_Data/final-som-clusters.RData")
 k <- num_clusters
 
 #There's a nebulous issue with defining seeds while generating a markdown file, so at the moment we are loading a pre-saved data object containing the relevant cluster definitions using the correct seeds. You can uncomment this if you wish to run the chunks directly.
@@ -450,7 +450,7 @@ SOM_metrics_plot <- ggplot(consensus_df,aes(x=`Cluster Size`,y=Value,color=Metri
 source("Codes/phylo_code.R")
 
 # pull in data
-raw_tree <- read.iqtree("Data/bac-only-UFboot-tree.treefile")
+raw_tree <- read.iqtree("Publication_Data/bac-only-UFboot-tree.treefile")
 
 #Make some modifications to the tree file here so we can look at bootstrap support, etc.
 raw_tree <- raw_tree%>%
@@ -465,7 +465,7 @@ support <- case_when(uf_boot>=95 ~ 1,
 tree$support <- support
 
 
-phylo <- read.csv("Data/derep_all-GTDB-phylo_r214.tsv",sep="\t",header=TRUE)
+phylo <- read.csv("Publication_Data/derep_all-GTDB-phylo_r214.tsv",sep="\t",header=TRUE)
 
 #Load the phylogeny and remove the Archaea
 split_phylo <- phylo%>%mutate(GTDB.Taxonomy=gsub("[a-z]__","",GTDB.Taxonomy))%>%separate(.,GTDB.Taxonomy,sep=";",into=c("domain","phylum","class","order","family","genus","species"))%>%filter(domain!="Archaea")
@@ -482,8 +482,8 @@ groups$type[1:15] <- groups$order[1:15]
 
 
 #Read in the reference genome phylogeny and quality so we have access to that information if needed
-ref_phylo <- read.csv("Data/ref_genomes.csv",sep="\t",header=TRUE)
-ref.quality <- read_csv("Data/ref-quality-data.csv")
+ref_phylo <- read.csv("Publication_Data/ref_genomes.csv",sep="\t",header=TRUE)
+ref.quality <- read_csv("Publication_Data/ref-quality-data.csv")
 
 ref_phylo <- ref_phylo%>%mutate(user_genome=gsub(".[0-9]_.*[0-9a-zA-Z_]","",user_genome))
 
@@ -500,7 +500,7 @@ split_ref_phylo <- ref_phylo%>%mutate(classification=gsub("[a-z]__","",classific
 
 split_phylo$group <- groups$type[match(split_phylo$order,groups$order)]
 
-quality_data <- read.csv("Data/rxn_info.csv")
+quality_data <- read.csv("Publication_Data/rxn_info.csv")
 
 som_data <- cbind(genome_IDs,majority_clust)%>%as.data.frame()
 colnames(som_data) <- c("value","clusters")
@@ -783,7 +783,7 @@ flux_bubble_plot <- ggplot() +
 ```{r phylogeny, echo=FALSE}
 #Code to examine the phylogeny of SOM clusters
 #Load phylogeny and match it to genome IDs
-phylo <- read.csv("Data/derep_all-GTDB-phylo_r214.tsv",sep="\t",header=TRUE)
+phylo <- read.csv("Publication_Data/derep_all-GTDB-phylo_r214.tsv",sep="\t",header=TRUE)
 
 split_phylo <- phylo%>%mutate(GTDB.Taxonomy=gsub("[a-z]__","",GTDB.Taxonomy))%>%separate(.,GTDB.Taxonomy,sep=";",into=c("domain","phylum","class","order","family","genus","species"))%>%filter(domain!="Archaea")
 
@@ -1006,7 +1006,7 @@ asinh_trans = function(){
 
 }
 
-growth_dat <- read.csv("Data/growth_violin_data.csv")
+growth_dat <- read.csv("Publication_Data/growth_violin_data.csv")
 
 #Plot the growth rate distributions for each cluster (ideally add in statistical sig as well)
 growth_df <- cluster_df
@@ -1272,7 +1272,7 @@ growth_dep_by.phylo_plot <- ggplot(sum.taxa_df, aes(x = group, y = metabolite_cl
 ### Comparison to Matti's data... done!
 
 ```{r Matti Models, echo=FALSE}
-matti.quality <- read_csv("Data/matti-quality-data.csv")
+matti.quality <- read_csv("Publication_Data/matti-quality-data.csv")
 
 hq_genomes<-matti.quality%>%
   filter(Consensus>=0.8)%>%
@@ -1284,7 +1284,7 @@ polymer.compounds <- c("glycogen","starch","pectin",
                        "pullulan","galactan")
 
 #We want to try to directly compare the predictions by CarveMe on matti's models to his experimentally validated growth rates on substrates
-raw_growth_file <- read.csv("Data/Matti_growth-measurements.csv")
+raw_growth_file <- read.csv("Publication_Data/Matti_growth-measurements.csv")
 cols <- colnames(raw_growth_file)
 
 #Manually slicing dataset for now but could use cols var + keywords
@@ -1293,7 +1293,7 @@ colnames(all_growth_info) <- all_growth_info[1,]
 all_growth_info <- all_growth_info[-1,]
 
 #Create a heatmap of growth/no growth on sugar + acid compounds as well as heatmap of growth rates
-matti.metab.ids <- read.csv("Data/matti_lab_metabolite_ids.csv")
+matti.metab.ids <- read.csv("Publication_Data/matti_lab_metabolite_ids.csv")
 metab_names <- matti.metab.ids$X%>%as.matrix()
 
 # piv.binary_df <- binary_df%>%pivot_longer(-c(Genome),names_to="Metabolites",values_to="Growth/No Growth")
@@ -1362,7 +1362,7 @@ boot_plot<-ggplot(data = boot_df, aes(x = Agreement))+
 
 
 #We also wnat to take data frames regarding agreements of model predictions for growth (binary and numerical) between CarveMe models and experimental data
-agree_df <- read.csv("Data/20250212_matti_agreement_final.csv")
+agree_df <- read.csv("Publication_Data/20250212_matti_agreement_final.csv")
 
 #Filter for high quality genomes
 agree_df <- agree_df%>%
@@ -1617,8 +1617,8 @@ plot.binary.heatmap <- ggplot()+
 
 ```{r Read Recruitment, echo=FALSE}
 #Note to myself: there are only 3,917 genomes represented here which is the number of bacterial genomes in the dereplicated OMD, no archaea read recruitment, which makes sense
-rpkm_vals <- read.csv("Data/carve_me_rpkm_1425.csv")
-meta <- read.csv("Data/Estuary_metadata - Celeste_Paper.csv")
+rpkm_vals <- read.csv("Publication_Data/carve_me_rpkm_1425.csv")
+meta <- read.csv("Publication_Data/Estuary_metadata - Celeste_Paper.csv")
 
 #I have discovered an issue in the metdata from Celeste's paper. The longitude values for the Pearl River estuary data is missing a one in the hundreds place (the longitude values are ~113 and reported as ~13). Implementing a manual fix
 meta <- meta%>%mutate(lon=case_when(Region=="Pearl_river" ~ lon+100, Region!="Pearl_river" ~ lon))

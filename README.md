@@ -1,2 +1,3 @@
 # CarveWe
-This repository houses the relevant analytical code for the analysis of marine microbial metabolism at scale using CarveMe, corresponding to this [publication](https://www.biorxiv.org/content/10.1101/2024.05.29.596556v1.abstract).
+This repository houses the relevant scripts and publicly available data to reproduce the findings from analyzing marine microbial metabolism at scale using GEMs constructed with CarveMe, corresponding to this [publication](https://www.biorxiv.org/content/10.1101/2024.05.29.596556v1.abstract). At present, this repository houses a markdown file designed to ingest the data housed in the 
+*Publication_Data* folder and generate a markdown document that regenerates the results that we report in our paper. A generalized release of the core pipeline developed as part of this project will be released in the future.

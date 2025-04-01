@@ -1,3 +1,84 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:a56ce93da11498151fc67457e4f3f70a21ce5a9b7a51a5d1eaa82d72c890854a
-size 3878
+,Sugar/Acid,BiGG_Name,BiGG ID,Exchange_rxn
+3m2-oxybutyrate,Acid,3-Methyl-2-oxobutanoate,3mob,EX_3mob_e
+acetate,Acid,Acetate,ac,EX_ac_e
+galnac,Sugar,N-Acetyl-D-galactosamine,acgal,EX_acgal_e
+glcnac,Sugar,N-Acetyl-D-glucosamine,acgam,EX_acgam_e
+adenine,Other,Adenine,ade,EX_ade_e
+oxoglutarate,Acid,2-Oxoglutarate,akg,EX_akg_e
+alanine,Acid,L-Alanine,ala__L,EX_ala__L_e
+beta-alanine,Acid,Beta-Alanine,ala_B,EX_ala_B_e
+arabinose,Sugar,L-Arabinose,arab__L,EX_arab__L_e
+arginine,Acid,L-Arginine,arg__L,EX_arg__L_e
+asparagine,Acid,L-Asparagine,asn__L,EX_asn__L_e
+aspartate,Acid,L-Aspartate,asp__L,EX_asp__L_e
+butanol,Other,Butanol,btoh,EX_btoh_e
+butyrate,Acid,Butyrate (n-C4:0),but,EX_but_e
+benzoate,Other,Benzoate,bz,EX_bz_e
+cellobiose,Sugar,Cellobiose,cellb,EX_cellb_e
+citrate,Acid,Citrate,cit,EX_cit_e
+cytosine,Other,Cytosine,csn,EX_csn_e
+cysteine,Acid,L-Cysteine,cys__L,EX_cys__L_e
+cytidine,Other,Cytidine,cytd,EX_cytd_e
+deoxyuridine,Other,Deoxyuridine,duri,EX_duri_e
+ethanol,Other,Ethanol,etoh,EX_etoh_e
+fructose,Sugar,D-Fructose,fru,EX_fru_e
+fucose,Sugar,L-Fucose,fuc__L,EX_fuc__L_e
+fumarate,Acid,Fumarate,fum,EX_fum_e
+galactose,Sugar,D-Galactose,gal,EX_gal_e
+galactosamine,Sugar,D Galactosamine C6H13NO5,galam,EX_galam_e
+galacturonate,Sugar,D-Galacturonate,galur,EX_galur_e
+glucosamine,Sugar,D-Glucosamine,gam,EX_gam_e
+glucose,Sugar,D-Glucose,glc__D,EX_glc__D_e
+gluconate,Sugar,D-Gluconate,glcn,EX_glcn_e
+glucuronate,Sugar,D-Glucuronate,glcur,EX_glcur_e
+glutamine,Acid,L-Glutamine,gln__L,EX_gln__L_e
+glutamate,Acid,L-Glutamate,glu__L,EX_glu__L_e
+glycine,Acid,Glycine,gly,EX_gly_e
+glycerol,Other,Glycerol,glyc,EX_glyc_e
+glycolate,Acid,Glycolate C2H3O3,glyclt,EX_glyclt_e
+glycogen,Other,Glycogen C6H10O5,glycogen,EX_glycogen_e
+histidine,Acid,L-Histidine,his__L,EX_his__L_e
+homoserine,Acid,L-Homoserine,hom__L,EX_hom__L_e
+isocitrate,Acid,Isocitrate,icit,EX_icit_e
+isoleucine,Acid,L-Isoleucine,ile__L,EX_ile__L_e
+inositol,Other,Myo-Inositol,inost,EX_inost_e
+lactate,Acid,L-Lactate,lac__L,EX_lac__L_e
+lactose,Sugar,Lactose C12H22O11,lcts,EX_lcts_e
+leucine,Acid,L-Leucine,leu__L,EX_leu__L_e
+lysine,Acid,L-Lysine,lys__L,EX_lys__L_e
+malate,Acid,L-Malate,mal__L,EX_mal__L_e
+maltose,Sugar,Maltose C12H22O11,malt,EX_malt_e
+galactan,Other,Maltotriose C18H32O16,malttr,EX_malttr_e
+mannose,Sugar,D-Mannose,man,EX_man_e
+melibiose,Sugar,Melibiose C12H22O11,melib,EX_melib_e
+methionine,Acid,L-Methionine,met__L,EX_met__L_e
+mannitol,Other,D-Mannitol,mnl,EX_mnl_e
+oxalacetate,Acid,Oxaloacetate,oaa,EX_oaa_e
+pectin,Other,Pectin C6H7O6,pectin,EX_pectin_e
+phenylalanine,Acid,L-Phenylalanine,phe__L,EX_phe__L_e
+propionate,Acid,Propionate (n-C3:0),ppa,EX_ppa_e
+propanol,Other,1-Propanol,ppoh,EX_ppoh_e
+proline,Acid,L-Proline,pro__L,EX_pro__L_e
+pullulan,Other,"Pullulan (n=1200 repeat units, alpha-1,4 and alph-1,6 bounds)",pullulan1200,EX_pullulan1200_e
+pyruvate,Acid,Pyruvate,pyr,EX_pyr_e
+raffinose,Sugar,Raffinose C18H32O16,raffin,EX_raffin_e
+ribose,Sugar,D-Ribose,rib__D,EX_rib__D_e
+rhamnose,Sugar,L-Rhamnose,rmn,EX_rmn_e
+sarcosine,Acid,Sarcosine C3H7NO2,sarcs,EX_sarcs_e
+sorbitol,Other,D-Sorbitol,sbt__D,EX_sbt__D_e
+serine,Acid,L-Serine,ser__L,EX_ser__L_e
+starch,Other,Starch C12H20O10,starch,EX_starch_e
+succinate,Acid,Succinate,succ,EX_succ_e
+sucrose,Sugar,Sucrose C12H22O11,sucr,EX_sucr_e
+tartrate,Acid,L-tartrate,tartr__L,EX_tartr__L_e
+taurine,Acid,Taurine C2H7NO3S,taur,EX_taur_e
+threonine,Acid,L-Threonine,thr__L,EX_thr__L_e
+thymine,Other,Thymine C5H6N2O2,thym,EX_thym_e
+thymidine,Other,Thymidine C10H14N2O5,thymd,EX_thymd_e
+tryptophan,Acid,L-Tryptophan,trp__L,EX_trp__L_e
+tyrosine,Acid,L-Tyrosine,tyr__L,EX_tyr__L_e
+uracil,Other,Uracil,ura,EX_ura_e
+uridine,Other,Uridine,uri,EX_uri_e
+valine,Acid,L-Valine,val__L,EX_val__L_e
+xylose,Sugar,D-Xylose,xyl__D,EX_xyl__D_e
+xylitol,Other,Xylitol C5H12O5,xylt,EX_xylt_e

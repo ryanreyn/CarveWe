@@ -1,3 +1,13 @@
 # CarveWe
-This repository houses the relevant scripts and publicly available data to reproduce the findings from analyzing marine microbial metabolism at scale using GEMs constructed with CarveMe, corresponding to this [publication](https://www.biorxiv.org/content/10.1101/2024.05.29.596556v1.abstract). At present, this repository houses a markdown file designed to ingest the data housed in the 
-*Publication_Data* folder and generate a markdown document that regenerates the results that we report in our paper. A generalized release of the core pipeline developed as part of this project will be released in the future.
+## Overview
+CarveWe is a comprehensive workflow that integrates other open source tools, chiefly the CarveMe model annotation [software](https://github.com/cdanielmachado/carveme), for metabolic modeling and offers several distinct applications. Principally the complete workflow was designed to apply SOM neural networks to metabolic modeling readouts in order to group marine heterotrophic organisms into functional cohorts. These cohorts were then contextualized with information from a variety of data streams. This effort is described in full detail in this [publication](https://www.biorxiv.org/content/10.1101/2024.05.29.596556v1.abstract).
+
+## Genome alignment
+For users interested in a streamlined method to align their genomes of interest to the genomes associated with each of our 8 metabolic clusters, we provide a CLI integrated tool *genome-aligner*. With *genome-aligner* a user can simply provide the path to an individual fasta file or directory of fasta files and generate a report detailing the closest matching genome and its associated metabolic cluster. Currently, this tool support nucleotide and amino acid fasta sequences. This alignment is done by performing a best hit BLAST from the query genome(s) to a pre-made blast database using the appropriate BLAST program for the input file type.
+
+## Metabolic sensitivity prediction
+One novel key element of the CarveWe pipeline that we introduced was the notion of performing media predictions on the annotated models with *in silico* conditions meant to mimc a nutrient replete state (unbounded import flux) as well as nutrient deplete states. We are developing a more extensive workflow release that will enable the user to annotate model ensembles predict metabolic fluxes under nutrient replete conditions, and then predict metabolic sensitivities at a user-prescribed level of nutrient limitation.
+
+## Publication reproduction
+Reproducible science is essential, so this repository also houses the relevant scripts and publicly available data to reproduce the complete findings from analyzing marine microbial metabolism at scale using GEMs constructed with CarveMe, corresponding to this [publication](https://www.biorxiv.org/content/10.1101/2024.05.29.596556v1.abstract). This repository houses a markdown file designed to ingest the data housed in the 
+*Publication_Data* folder and generate a markdown document that regenerates the results that we report in our paper.

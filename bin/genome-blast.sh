@@ -102,3 +102,6 @@ paste ${genome_alignments} ${match_file} > ${final_file}
 
 #Remove any temporary files generated during the BLAST process
 rm -f ${out_dir}/tmp*
+
+#Deactivate conda environment before releasing back to main process
+conda deactivate

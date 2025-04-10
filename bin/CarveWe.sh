@@ -128,7 +128,38 @@ fi
 
 ##### This section will run segments of the CarveWe pipeline for users interested in
 #processing their own genomes through CarveMe, COBRApy, and metabolic sensitivity####
-printf "${YELLOW}Running the provided genomes through CarveMe to annotate metabolic models.${NC}\n\n"
+#Run the model carving and reaction info extraction subprocess
+printf "${YELLOW}Running the provided genomes through CarveMe to annotate metabolic models:${NC}\n\n"
 
-run-carveme.sh -i ${fasta_file} -o ${out_dir} -e ${ensemble_size}
+if [ "$fna_type" == 'true' ]
+then
+    run-carveme.sh -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size}
+else
+    run-carveme.sh -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size}
+fi
 
+#Now we will pass the xml and reaction info files to the COBRApy subprocess
+media_dir=$out_dir"media_files"
+if [ -d "$media_dir" ]
+then
+    rm -r $media_dir
+    mkdir $media_dir
+else
+    mkdir $media_dir
+fi
+
+#Create a temporary file with all of the genome files (dropping the fasta extension)
+printf "${YELLOW}Running the SBML CarveMe model files through COBRApy for media prediction:${NC}\n\n"
+
+genome_list=$out_dir"tmp-genomes-list.txt"
+ls $fasta_file*.f[an]a | sed "s/\.f[an]a//g; s/.*\///g" > $genome_list
+
+while read genome
+do
+    printf "Running $genome through media prediction, outputting the results to $media_dir\n\n"
+    python generate_ensemble_media_microbiomics.py --ensemble-size $ensemble_size \
+    --work-dir $out_dir --media-dir $media_dir $genome
+done < $genome_list
+
+#Remove temporary file listing out the genomes
+rm $genome_list

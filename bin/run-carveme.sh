@@ -1,13 +1,18 @@
 #!/bin/bash
 #This script is designed to take user input from the higher level CarveWe bash script
 #and perform several steps of the CarveWe metabolic model annotation pipeline
+fna_type="false"
+faa_type="false"
+
 printf "Running CarveMe\n\n"
 
-while getopts "i:o:e:" args; do
+while getopts "i:o:e:an" args; do
     case "${args}" in
         i) fasta_dir=${OPTARG};;
         o) out_dir=${OPTARG};;
         e) ensemble_size=${OPTARG};;
+        n) fna_type='true';;
+        a) faa_type='true';;
     esac
 done
 
@@ -26,18 +31,35 @@ conda activate /project/nmherrer_110/tools/.conda/envs/CarveMe
 #echo "Number of BiGG genes: " $BiGG >> sub_output
 xml_dir=$out_dir"xml_files"
 
+if [ -d $xml_dir ]
+then
+    rm -r $xml_dir
+fi
+
+
 #List out all of the fasta files to a temporary file to draw from to run CarveMe
 tmp_filelist=${out_dir}"tmp-fasta-list.txt"
-ls ${fasta_dir}*.fna > $tmp_filelist
+ls ${fasta_dir}*.f[an]a > $tmp_filelist
 
 #Actual command loop to define fasta and xml files and execute CarveMe
-while read fasta_file
-do
-    xml_file=`echo $fasta_file | sed "s/\.f[an]a/\.xml/g; s/.*\///g"`
-    printf "Creating CarveMe ensemble ${xml_file} in ${xml_dir} with ${ensemble_size} models\n\n"
-    carve -v --dna -o "${xml_dir}/${xml_file}" -n $ensemble_size $fasta_file
-    printf "\n"
-done < $tmp_filelist
+if [ "$fna_type" == 'true' ]
+then
+    while read fasta_file
+    do
+        xml_file=`echo $fasta_file | sed "s/\.f[an]a/\.xml/g; s/.*\///g"`
+        printf "Creating CarveMe ensemble ${xml_file} in ${xml_dir} with ${ensemble_size} models\n\n"
+        carve -v --dna -o "${xml_dir}/${xml_file}" -n $ensemble_size $fasta_file
+        printf "\n"
+    done < $tmp_filelist
+else
+    while read fasta_file
+    do
+        xml_file=`echo $fasta_file | sed "s/\.f[an]a/\.xml/g; s/.*\///g"`
+        printf "Creating CarveMe ensemble ${xml_file} in ${xml_dir} with ${ensemble_size} models\n\n"
+        carve -v -o "${xml_dir}/${xml_file}" -n $ensemble_size $fasta_file
+        printf "\n"
+    done < $tmp_filelist
+fi
 
 #Now we will process the output .xml files with our custom JSON parsing file to
 #create our ensemble reaction info files

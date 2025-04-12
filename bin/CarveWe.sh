@@ -71,6 +71,7 @@ fna_type='false'
 faa_type='false'
 ensemble_size=2
 run_blast='true'
+data_dir='../ref_data'
 
 #Establish the options for this program
 while getopts p:dano:t:e:b args
@@ -149,7 +150,7 @@ else
 fi
 
 #Create a temporary file with all of the genome files (dropping the fasta extension)
-printf "${YELLOW}Running the SBML CarveMe model files through COBRApy for media prediction:${NC}\n\n"
+printf "${YELLOW}\nRunning the SBML CarveMe model files through COBRApy for media prediction:${NC}\n\n"
 
 genome_list=$out_dir"tmp-genomes-list.txt"
 ls $fasta_file*.f[an]a | sed "s/\.f[an]a//g; s/.*\///g" > $genome_list
@@ -160,6 +161,20 @@ do
     python generate_ensemble_media_microbiomics.py --ensemble-size $ensemble_size \
     --work-dir $out_dir --media-dir $media_dir $genome
 done < $genome_list
+
+#Now we will pass the raw COBRApy predictions to a script to filter, merge, and 
+#convert the output in order to run metabolite sensitivity tests as well
+printf "${YELLOW}Converting raw COBRApy output to correct input for sensitivity prediction:${NC}\n\n"
+
+python convert-media-output.py --media-dir $media_dir --work-dir $out_dir
+
+
+#Now we will pass our reformatted and combined media data to predict metabolite
+#sensitivities for all input genomes
+printf "${YELLOW}Extracting sensitivity values for our defined metabolite classes:${NC}\n\n"
+
+python get_met_depends.py --media-dir $media_dir --work-dir $out_dir \
+    --ensemble-size $ensemble_size --data-dir $data_dir
 
 #Remove temporary file listing out the genomes
 rm $genome_list

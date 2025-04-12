@@ -1,0 +1,457 @@
+Metabolite,Chemical/Biological Classification ,Higher Level Classification,CHEBI Description
+10 Phenyldecanoic acid,Carboxylic Acid,Carboxylic Acid,
+2 4 6 Trinitrotoluene,Other,Other,"toluene, benzine, A trinitrotoluene having the nitro groups at positions 2, 4 and 6."
+2-Oxoglutarate,Keytone,Ketones/Aldehydes,
+4-Aminobenzoate,Amino Acid,Amino Acids/Derivatives,
+4-Aminobutanoate,Amino Acid,Amino Acids/Derivatives,
+Acetaldehyde,Aldehyde,Ketones/Aldehydes,
+Adenosine,Nucleoside,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Ala-Gln,Peptide,Peptides,
+Ala-His,Peptide,Peptides,
+Ala-L-Thr-L,Peptide,Peptides,
+Ala-Leu,Peptide,Peptides,
+Arsenate,Inorgainic Ion,Inorganic,AsO4(3-)
+D Valine,Amino Acid,Amino Acids/Derivatives,
+Dimethyl sulfoxide,Organic Sulphur,Organic Sulfur,
+Ethanol,Alcohol,Alcohol,
+Gly asn L C6H11N3O4,Peptide,Peptides,
+Gly pro L C7H12N2O3,Peptide,Peptides,
+Gly-Cys,Peptide,Peptides,
+Gly-Gln,Peptide,Peptides,
+Gly-Leu,Peptide,Peptides,
+Gly-Met,Peptide,Peptides,
+Gly-Phe,Peptide,Peptides,
+Gly-Tyr,Peptide,Peptides,
+Glycerophosphoglycerol,Alkylphosphates,Other,
+Glycine-glycine-glutamine tripeptide,Peptide,Peptides,
+Glycylphenylalanine,Peptide,Peptides,
+H2O H2O,Inorganic Liquid,Inorganic,
+Hydrogen cyanide,Other,Other,Nitrile
+Hydrogen peroxide,Inorganic Liquid,Inorganic,
+L Glycinylmethionine,Peptide,Peptides,
+L alaninyltryptophan,Peptide,Peptides,
+L glycinylglutamine,Peptide,Peptides,
+L histidinylhistidine,Peptide,Peptides,
+L methionine R oxide C5H11NO3S,Amino Acid Derivative,Amino Acids/Derivatives,
+L-Alanine,Amino Acid,Amino Acids/Derivatives,
+L-Arginine,Amino Acid,Amino Acids/Derivatives,
+L-Asparagine,Amino Acid,Amino Acids/Derivatives,
+L-Glutamate,Amino Acid,Amino Acids/Derivatives,
+L-Glutamine,Amino Acid,Amino Acids/Derivatives,
+L-Lysine,Amino Acid,Amino Acids/Derivatives,
+L-Phenylalanine,Amino Acid,Amino Acids/Derivatives,
+L-Proline,Amino Acid,Amino Acids/Derivatives,
+L-Threonine,Amino Acid,Amino Acids/Derivatives,
+L-Tryptophan,Amino Acid,Amino Acids/Derivatives,
+L-Tyrosine,Amino Acid,Amino Acids/Derivatives,
+"L-alanine-D-glutamate-meso-2,6-diaminoheptanedioate",Other,Other,
+Lysine-glutamine-glycine tripeptide,Peptide,Peptides,
+Met L ala L C8H16N2O3S,Peptide,Peptides,
+Nitrate,Inorgainic Ion,Inorganic,
+Nitrite,Inorgainic Ion,Inorganic,
+O2 O2,Inorganic Gas,Inorganic,
+Phosphoenolpyruvate,Ester,Carboxylic Acid,this has a carboxylic acid with an ester bond to a phosphate group
+Putrescine,Amine,Amines/Amides,
+Sulfur,Inorgainic Ion,Inorganic,
+Tetrathionate,Organic Sulphur,Organic Sulfur,
+Thiamin,B Vitamin,B Vitamins,
+Trithionate,Organic Sulphur,Organic Sulfur,
+Uracil,Nucleotide,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Xanthine,Purine - other,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+ 3 Hydroxy 10 phenyldecanoic acid,Carboxylic Acid,Carboxylic Acid,
+2-Oxobutanoate,Carboxylic Acid,Carboxylic Acid,
+Alpha-L-Arabinan (3 subunits),Polysaccharide,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Chorismate,Carboxylic Acid,Carboxylic Acid,
+Cytidine,Nucleoside,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+D-Serine,Amino Acid,Amino Acids/Derivatives,
+Deoxycytidine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,pyrimidine 2'-deoxyribonucleosides
+Diacetylchitobiose,Other,Carbohydrates/Derivatives,"derived from breakdown of chitin, considered a chitobase"
+Fe(III)hydroxamate,Siderophore,Other,siderophore
+Folate,B Vitamin,B Vitamins,
+Formamide,Amide,Amines/Amides,
+Glycine betaine,Amino Acid,Amino Acids/Derivatives,alpha amino acid
+Guanine,Nucleobase,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+"Iron(III) chelated carboxymycobactin T (R=8 carbon, final carbon is carboxyl group)",Siderophore,Other,
+L Methionine S oxide C5H11NO3S,Amino Acid Derivative,Amino Acids/Derivatives,
+L alaninylthreonine,Peptide,Peptides,
+L-Citrulline,Amino Acid,Amino Acids/Derivatives,alpha amino acid 
+L-Leucine,Amino Acid,Amino Acids/Derivatives,
+Maltotriose C18H32O16,Polysaccharide,Carbohydrates/Derivatives,
+"N,N'-diacetylchitobiose",Other,Carbohydrates/Derivatives,chitobiose derivative
+NMN C11H14N2O8P,Nucleotide,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Pyridoxine,B Vitamin,B Vitamins,
+S-Methyl-L-methionine,Amino Acid Derivative,Amino Acids/Derivatives,
+Thymidine C10H14N2O5,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+UDP-N-acetyl-3-O-(1-carboxyvinyl)-D-glucosamine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Undecaprenyl phosphate,Phospholipid,Phospholipids/Fatty Acids/Triglycerides,
+Urea CH4N2O,Amide,Amines/Amides,
+"1,4-alpha-D-glucan",Polysaccharide,Carbohydrates/Derivatives,
+1-deoxy-D-xylulose,Carbohydrate - other,Carbohydrates/Derivatives,deoxy sugar
+Ammonium,Inorgainic Ion,Inorganic,
+Carbon monoxide,Inorganic Gas,Inorganic,
+D-Fructose,Monosaccharide,Carbohydrates/Derivatives,
+L histidinylglycine,Amino Acid,Amino Acids/Derivatives,
+N-Acetyl-D-glucosamine 1-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,"monosaccharide derivative, an aminosugar"
+Shikimate,Carboxylic Acid,Carboxylic Acid,
+Sulfate,Inorgainic Ion,Inorganic,
+Thiosulfate,Organic Sulphur,Organic Sulfur,
+"2',3'-Cyclic CMP",Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,nucleotide derivative
+4-Aminobutanal,Aldehyde,Ketones/Aldehydes,amino aldehyde
+5-Methylcytosine,Nucleobase,Nucleobases/Nucleosides/Nucleotides/Derivatives,derivative of cytosite - this is result of DNA methylation 
+Adenine,Nucleobase,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+"Alpha,alpha'-Trehalose 6-phosphate",Polysaccharide,Carbohydrates/Derivatives,Glycan
+Choline C5H14NO,Amine,Amines/Amides,quatrinary amine
+Creatinine,Amide,Amines/Amides,lactam - cyclic amide
+D Asparagine,Amino Acid,Amino Acids/Derivatives,
+D-Glucose 1-phosphate,Monosaccharide,Carbohydrates/Derivatives,
+D-Glucuronate,Carbohydrate Acid,Carbohydrates/Derivatives,
+D-Tagatose,Monosaccharide,Carbohydrates/Derivatives,
+Deoxyuridine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Glycine,Amino Acid,Amino Acids/Derivatives,
+H+,Inorgainic Ion,Inorganic,
+Hydrogen sulfide,Inorganic Gas,Inorganic,
+L alaninylhistidine,Peptide,Peptides,
+L glycinylserine,Peptide,Peptides,
+L-Homoserine,Amino Acid,Amino Acids/Derivatives,
+L-Methionine Sulfoxide,Amino Acid,Amino Acids/Derivatives,l alpha amino acid
+L-Prolinylglycine,Peptide,Peptides,dipeptide zwitterion
+L-alanine-L-glutamate,Peptide,Peptides,
+Leucylleucine,Peptide,Peptides,
+Maltoheptaose,Polysaccharide,Carbohydrates/Derivatives,
+Phenylethyl alcohol,Alcohol,Alcohol,Phenethyl alcohol
+Proline-histidine-glutamine tripeptide,Peptide,Peptides,
+Raffinose C18H32O16,Polysaccharide,Carbohydrates/Derivatives,
+Reduced glutathione,Organic Sulphur,Organic Sulfur,thiol
+Uridine,Nucleoside,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+ 3 Hydroxypentanoic acid,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+ R R  2 3 Butanediol C4H10O2,Alcohol,Alcohol,diol
+"2',3'-Cyclic GMP",Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,nucleotide derivative
+"2,3-diaminopropionate",Amino Acid,Amino Acids/Derivatives,diamino acid
+"2,5-diketo-D-gluconate",Carboxylic Acid,Carboxylic Acid,intermediate for d-tartrate and also vitamin C production.
+2-Dehydro-D-gluconate,Carboxylic Acid,Carboxylic Acid,
+3  CMP C9H12N3O8P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,nucleotide derivative
+3-Phospho-D-glycerate,Carboxylic Acid,Carboxylic Acid,
+4 Hydroxyphenylacetic acid C8H8O3,Carboxylic Acid,Carboxylic Acid,also a phenol
+Arbutin C12H16O7,Glycoside,Carbohydrates/Derivatives,
+Benzoate,Carboxylic Acid,Carboxylic Acid,
+Catechol,Alcohol,Alcohol,benzene di-alcholol 
+Cellobiose,Disaccharide,Carbohydrates/Derivatives,
+Cis-Aconitate,Carboxylic Acid,Carboxylic Acid,
+Coenzyme A,Other,Other,"a thiol comprising a panthothenate unit in phosphoric anhydride linkage with a 3',5'-adenosine diphosphate unit; and an aminoethanethiol unit"
+Creatine cytosol,Amino Acid,Amino Acids/Derivatives,
+D-Galacturonate,Carbohydrate Acid,Carbohydrates/Derivatives,
+D-Glucosamine,Carbohydrate - other,Carbohydrates/Derivatives,amino sugar
+D-Glucose,Monosaccharide,Carbohydrates/Derivatives,
+D-Glyceraldehyde,Monosaccharide,Carbohydrates/Derivatives,
+D-Methionine,Amino Acid,Amino Acids/Derivatives,
+D-O-Phosphoserine,Amino Acid,Amino Acids/Derivatives,alpha amino acid
+D-Proline,Amino Acid,Amino Acids/Derivatives,
+D-Xylose,Monosaccharide,Carbohydrates/Derivatives,
+D-phenylalanine,Amino Acid,Amino Acids/Derivatives,
+Dextrin C12H20O10,Polysaccharide,Carbohydrates/Derivatives,
+Dihydroxyacetone,Monosaccharide,Carbohydrates/Derivatives,
+Dihydroxyacetone phosphate,Carbohydrate - other,Carbohydrates/Derivatives,"also a monosaccharide, but is a phosphosugar"
+Dopamine,Amine,Amines/Amides,Catechol in which the hydrogen at position 4 is substituted by a 2-aminoethyl group
+Fe2+ mitochondria,Inorgainic Ion,Inorganic,
+Fumarate,Carboxylic Acid,Carboxylic Acid,
+Galactitol,Carbohydrate - other,Carbohydrates/Derivatives,sugar alcohol
+Glycerol 3-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,carbohydrate phosphate
+Isocitrate,Carboxylic Acid,Carboxylic Acid,
+L-Arabinose,Monosaccharide,Carbohydrates/Derivatives,
+L-tartrate,Carboxylic Acid,Carboxylic Acid,
+Linoleic acid (all cis C18:2) n-6,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+"Meso-2,6-Diaminoheptanedioate",Other,Other,"Dizwitterionic form of meso-2,6-diaminopimelic acid arising from migration of protons from both carboxy groups to the amino groups"
+N-Acetyl-D-glucosamine(anhydrous)N-Acetylmuramic acid,Other,Other,
+N-Formimidoyl-L-glutamate,Amino Acid,Amino Acids/Derivatives,alpha amino acid
+Nitric oxide,Inorganic Gas,Inorganic,
+Octacosanoyl-CoA,Other,Other,An ultra-long-chain fatty acyl-CoA that results from the formal condensation of the thiol group of coenzyme A with the carboxy group of octacosanoic acid (montanic acid)
+Selenate,Inorgainic Ion,Inorganic,
+Succinate,Carboxylic Acid,Carboxylic Acid,
+Thymine C5H6N2O2,Nucleobase,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Trans 4 Hydroxy L proline C5H9NO3,Amino Acid Derivative,Amino Acids/Derivatives,
+Trimethylamine N-oxide,Amine,Amines/Amides,amine oxide
+Undecaprenyl diphosphate,Phospholipid,Phospholipids/Fatty Acids/Triglycerides,diphospho lipid
+ 3 hydroxynonanoic acid,Carboxylic Acid,Carboxylic Acid,Beta hydroxy acid
+"2',3'-Cyclic AMP",Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,nucleotide derivative
+3  AMP C10H12N5O7P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,nucleotide derivative
+3-Methylbutanoic acid,Carboxylic Acid,Carboxylic Acid,
+4-Hydroxyphenylacetate,Carboxylic Acid,Carboxylic Acid,
+8 Phenyloctanoic acid,Carboxylic Acid,Carboxylic Acid,
+Beta D glucose 6 phosphate C6H11O9P,Carbohydrate - other,Carbohydrates/Derivatives,phospho sugar
+Cu+,Inorgainic Ion,Inorganic,
+D-Arginine,Amino Acid,Amino Acids/Derivatives,
+D-Galactarate,Carboxylic Acid,Carboxylic Acid,dicarboxylic acid
+D-Lysine,Amino Acid,Amino Acids/Derivatives,
+D-Mannitol,Carbohydrate - other,Carbohydrates/Derivatives,sugar alcohol
+D-tartrate,Carboxylic Acid,Carboxylic Acid,dicarboxylic acid
+DCMP C9H12N3O7P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+DTMP C10H13N2O8P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Deoxyadenosine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Fructoselysine,Other,Other,fructose + lysine
+Glycerol,Alcohol,Alcohol,triol
+Glycerophosphoserine,Phospholipid,Phospholipids/Fatty Acids/Triglycerides,also amino acid derivative
+Glycolate C2H3O3,Carboxylic Acid,Carboxylic Acid,
+Heptanoate,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Hydrogen,Inorganic Gas,Inorganic,
+Hydroxylamine,Amine,Amines/Amides,
+Indole,Other,Other,polycyclic heteroarene
+L-Histidine,Amino Acid,Amino Acids/Derivatives,
+L-Isoleucine,Amino Acid,Amino Acids/Derivatives,
+L-Serine,Amino Acid,Amino Acids/Derivatives,
+L-Valine,Amino Acid,Amino Acids/Derivatives,
+"L-alanine-D-glutamate-meso-2,6-diaminoheptanedioate-D-alanine",Other,Other,weird peptide?
+L-methionine-R-sulfoxide,Amino Acid,Amino Acids/Derivatives,
+Methanol,Alcohol,Alcohol,
+N-Acetylneuraminate,Carbohydrate Acid,Carbohydrates/Derivatives,sugar acid
+Nonanoate C9H17O2,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Octadecanoate (n-C18:0),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Octadecenoate (n-C18:1),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Ornithine,Amino Acid,Amino Acids/Derivatives,
+Petroselaidic acid,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Pyruvate,Carboxylic Acid,Carboxylic Acid,
+Sulfite,Inorgainic Ion,Inorganic,
+Superoxide anion,Inorgainic Ion,Inorganic,
+Triacylglycerol  hexadecanoate,Triacylglycerol,Phospholipids/Fatty Acids/Triglycerides,
+Triacylglycerol  nC181d9,Triacylglycerol,Phospholipids/Fatty Acids/Triglycerides,
+UDP-D-glucuronate,Carbohydrate Acid,Carbohydrates/Derivatives,
+L-fuculose,Monosaccharide,Carbohydrates/Derivatives,
+Propanal,Aldehyde,Ketones/Aldehydes,
+L-Malate,Carboxylic Acid,Carboxylic Acid,dicarboxylic acid
+ 3 Hydroxy 10 phenyldecanoic acid,3-Hydroxy-Carboxlic Acid,Carboxylic Acid,beta-hydroxy carboxilic acid
+UMP C9H11N2O9P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+ 3 Hydroxy 4Z decenic acid,3-Hydroxy-Carboxlic Acid,Carboxylic Acid,beta-hydroxy caboxilic acid
+ 3 Hydroxypentanoic acid,3-Hydroxy-Carboxlic Acid,Carboxylic Acid,
+ R R  2 3 Butanediol C4H10O2,Alcohol,Alcohol,diol
+4-Hydroxybenzoate,Carboxylic Acid,Carboxylic Acid,
+Cytosine,Nucleobase,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+D-Mannose,Monosaccharide,Carbohydrates/Derivatives,
+D-Mannose 1-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,
+Diacetyl C4H6O2,Keytone,Ketones/Aldehydes,diketone
+Lactose C12H22O11,Disaccharide,Carbohydrates/Derivatives,
+Orotate C5H3N2O4,Nucleobase,Nucleobases/Nucleosides/Nucleotides/Derivatives,uracil derivative
+ 3 hydroxynonanoic acid,3-Hydroxy-Carboxlic Acid,Carboxylic Acid,
+Cys Gly C5H10N2O3S,Peptide,Peptides,
+D-Ornithine,Amino Acid,Amino Acids/Derivatives,alpha amino acid
+"(R)-Propane-1,2-diol",Alcohol,Alcohol,diol
+1-Propanol,Alcohol,Alcohol,
+2-3-dihydroxybenzoylserine trimer-Fe-III,Siderophore,Other,
+2-Aminoethylphosphonate,Other,Other,phosphonic acid
+3-Oxoadipate,Carboxylic Acid,Carboxylic Acid,dicaroboxylic acid
+4-aminobenzoate-glutamate,Peptide,Peptides,
+D-Glucose 6-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,
+DAMP C10H12N5O6P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+DGMP C10H12N5O7P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+DUMP C9H11N2O8P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Decanoate (n-C10:0),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Glycolaldehyde,Aldehyde,Ketones/Aldehydes,also has an oh group
+Hexadecanoate (n-C16:0),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Hexadecenoate (n-C16:1),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Inosine,Nucleoside,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Pentanoate,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Phenylacetaldehyde,Aldehyde,Ketones/Aldehydes,
+Phosphate,Inorgainic Ion,Inorganic,
+Phosphotyrosine,Amino Acid Derivative,Amino Acids/Derivatives,
+Starch C12H20O10,Polysaccharide,Carbohydrates/Derivatives,
+Sucrose C12H22O11,Disaccharide,Carbohydrates/Derivatives,
+UDP-N-acetyl-D-galactosamine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,nucleotide sugar
+Alpha L Arabinan C15H24O12,Polysaccharide,Carbohydrates/Derivatives,
+Calcium,Inorgainic Ion,Inorganic,
+Chloride,Inorgainic Ion,Inorganic,
+Co2+,Inorgainic Ion,Inorganic,
+Copper,Inorgainic Ion,Inorganic,
+Iron bound extracellular staphyloferrin B,Siderophore,Other,
+Potassium,Inorgainic Ion,Inorganic,
+Magnesium,Inorgainic Ion,Inorganic,
+Manganese,Inorgainic Ion,Inorganic,
+Pyridoxamine,B Vitamin,B Vitamins,
+Zinc,Inorgainic Ion,Inorganic,
+Iron bound extracellular staphyloferrin A,Siderophore,Other,
+L-Methionine,Amino Acid,Amino Acids/Derivatives,
+Sn-Glycero-3-phosphocholine,Phospholipid,Phospholipids/Fatty Acids/Triglycerides,
+2 methylbutyraldehyde C5H10O,Aldehyde,Ketones/Aldehydes,
+Citrate,Carboxylic Acid,Carboxylic Acid,
+Deoxyguanosine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,neucleotide derivative
+(R)-Pantothenate,B Vitamin,B Vitamins,
+Riboflavin C17H20N4O6,B Vitamin,B Vitamins,
+4-Amino-5-hydroxymethyl-2-methylpyrimidine,Other,Other,"pyrimidine, aromatic compound "
+D-Alanyl-D-alanine,Peptide,Peptides,
+Iron (Fe3+),Inorgainic Ion,Inorganic,
+Hypoxanthine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Diphosphate,Inorgainic Ion,Inorganic,
+Pseudouridine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Trehalose,Disaccharide,Carbohydrates/Derivatives,
+Ferrypyoverdine  P putida KT2440 specific,Siderophore,Other,
+2-Dehydro-3-deoxy-D-gluconate,Carboxylic Acid,Carboxylic Acid,
+D Arabinose C5H10O5,Aldehyde,Ketones/Aldehydes,
+Methanethiol CH4S,Organic Sulphur,Organic Sulfur,
+L-Cystathionine,Amino Acid Derivative,Amino Acids/Derivatives,also is organic sulfur
+Myo-Inositol,Carbohydrate - other,Carbohydrates/Derivatives,"isomer of gluocose, pseudovitamin, ployol (PubChem)"
+Serine-glutamine-glycine tripeptide,Peptide,Peptides,
+Fe(III)dicitrate,Siderophore,Other,
+D-Glucosamine 6-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,phosphosugar
+Guanosine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Nicotinate,B Vitamin,B Vitamins,
+D Tyrosine,Amino Acid Derivative,Amino Acids/Derivatives,
+D-Galactonate,Carbohydrate Acid,Carboxylic Acid,
+3  UMP C9H11N2O9P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+L-Cysteine,Amino Acid,Amino Acids/Derivatives,also organic sulfur
+Maltose C12H22O11,Disaccharide,Carbohydrates/Derivatives,
+Maltohexaose,Polysaccharide,Carbohydrates/Derivatives,
+GMP C10H12N5O8P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+D-Glycerate 2-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,phosphocarbohydrate acid (HMDB)
+D-Mannose 6-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,phospho carbohydrate 
+N-Acetyl-D-mannosamine,Monosaccharide,Carbohydrates/Derivatives,
+2-Phosphoglycolate,Carboxylic Acid,Carboxylic Acid,phospho carboxylic acid
+Aminoimidazole-riboside,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Phenethylamine,Amine,Amines/Amides,
+Pyridoxal,B Vitamin,B Vitamins,
+"(S)-Propane-1,2-diol",Alcohol,Alcohol,
+Guanosine 3  phosphate C10H12N5O8P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+AMP C10H12N5O7P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Formate,Carboxylic Acid,Carboxylic Acid,
+Deoxyribose C5H10O4,Monosaccharide,Carbohydrates/Derivatives,
+Gly asp L C6H9N2O5,Peptide,Peptides,
+Fe-enterobactin,Siderophore,Other,
+Sn-Glycero-3-phosphoethanolamine,Phospholipid,Phospholipids/Fatty Acids/Triglycerides,carbohydrate phosphate
+Sn-Glycero-3-phospho-1-inositol,Phospholipid,Phospholipids/Fatty Acids/Triglycerides,carbohydrate phosphate
+D-Fructose 6-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,carbohydrate phosphate
+L-Fucose,Monosaccharide,Carbohydrates/Derivatives,
+4-Hydroxy-benzyl alcohol,Alcohol,Alcohol,aromatic alcohol
+L Ornithine C5H13N2O2,Amino Acid Derivative,Amino Acids/Derivatives,
+D-Sorbitol,Carbohydrate - other,Carbohydrates/Derivatives,sugar alcohol
+N-Acetyl-D-glucosamine,Carbohydrate - other,Carbohydrates/Derivatives,monosaccharide amide
+L-Aspartate,Amino Acid,Amino Acids/Derivatives,
+Ethanolamine,Amine,Amines/Amides,also alcohol (CHEBI)
+Allantoin,Other,Other,"An imidazolidine-2,4-dione that is 5-aminohydantoin in which a carbamoyl group is attached to the exocyclic nitrogen. (CHEBI)"
+Propionate (n-C3:0),Carboxylic Acid,Carboxylic Acid,
+4-aminobenzoyl-glutamate,Amino Acid Derivative,Amino Acids/Derivatives,
+Tagatose,Monosaccharide,Carbohydrates/Derivatives,
+Methanesulfonate,Organic Sulphur,Organic Sulfur,
+D-Glucuronate 1-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,phospho carbohydrate
+D-Ribose,Monosaccharide,Carbohydrates/Derivatives,
+Maltotetraose,Polysaccharide,Carbohydrates/Derivatives,
+Agmatine,Amine,Amines/Amides,organic amino
+L-Carnosine,Peptide,Peptides,
+Toluene,Other,Other,aromatic
+Xanthosine,Nucleoside,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Salicin C13H18O7,Carbohydrate - other,Carbohydrates/Derivatives,
+CMP C9H12N3O8P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+L-Threonine O-3-phosphate,Amino Acid Derivative,Amino Acids/Derivatives,
+Nitrous oxide,Inorganic Gas,Inorganic,
+Benzaldehyde,Aldehyde,Ketones/Aldehydes,
+Deoxyinosine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+N Ribosylnicotinamide C11H15N2O5,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Nicotinamide,B Vitamin,B Vitamins,
+"2',3'-Cyclic UMP",Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+D-Alanine,Amino Acid,Amino Acids/Derivatives,
+DIMP C10H12N4O7P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+L alaninylleucine,Peptide,Peptides,
+L-Ascorbate,Other,Other,C vitamin
+UDP-N-acetyl-D-glucosamine,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,neucleotide sugar
+Oxidized glutathione,Organic Sulphur,Organic Sulfur,
+UDPgalactose,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,nucleotide sugar 
+L-Lyxose,Monosaccharide,Carbohydrates/Derivatives,
+Propanoyl phosphate,Other,Other,phosphate ester
+Formaldehyde,Aldehyde,Ketones/Aldehydes,
+Indole 3 acetaldehyde C10H9NO,Aldehyde,Ketones/Aldehydes,
+6-Phospho-D-gluconate,Carboxylic Acid,Carboxylic Acid,
+L-Xylulose,Monosaccharide,Carbohydrates/Derivatives,
+D-Mannitol 1-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,
+D-Glutamate,Amino Acid,Amino Acids/Derivatives,
+IMP C10H11N4O8P,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+UDPglucose,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Phenylacetic acid,Carboxylic Acid,Carboxylic Acid,
+3 Hydroxy 8 phenyloctanoic acid,3-Hydroxy-Carboxlic Acid,Phospholipids/Fatty Acids/Triglycerides,
+Acetate,Carboxylic Acid,Carboxylic Acid,
+5-Methylthio-D-ribose,Organic Sulphur,Organic Sulfur,sugar with thio group
+Acetoacetate,Carboxylic Acid,Carboxylic Acid,
+Tetradecanoate (n-C14:0),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Alpha D-glucose,Monosaccharide,Carbohydrates/Derivatives,
+Quinate,Carboxylic Acid,Carboxylic Acid,
+L Ectoine,Carboxylic Acid,Carboxylic Acid,compatabile osmolite
+Ala L asp L C7H11N2O5,Peptide,Peptides,
+6 Phenylhexanoic acid,Carboxylic Acid,Carboxylic Acid,maybe a fatty acid with an aromatic ring????
+D-Glucarate,Carboxylic Acid,Carboxylic Acid,
+Choline sulfate,Organic Sulphur,Organic Sulfur,
+L-Lactate,Carboxylic Acid,Carboxylic Acid,
+9 Phenylnonanoic acid,Carboxylic Acid,Carboxylic Acid,maybe a fatty acid with an aromatic ring????
+D Leucine,Amino Acid,Amino Acids/Derivatives,
+Oxaloacetate,Carboxylic Acid,Carboxylic Acid,
+Psicoselysine,Amino Acid Derivative,Amino Acids/Derivatives,
+D-Gluconate,Carboxylic Acid,Carboxylic Acid,
+4-Hydroxy-L-threonine,Amino Acid Derivative,Amino Acids/Derivatives,
+Beta-Alanine,Amino Acid Derivative,Amino Acids/Derivatives,
+L Sorbose C6H12O6,Monosaccharide,Carbohydrates/Derivatives,
+Beta Alaninamide,Amino Acid Derivative,Amino Acids/Derivatives,
+Butyrate (n-C4:0),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+3 hydroxy  5Z 8Z  tetradecedienic acid,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Benzyl alcohol,Alcohol,Alcohol,
+2(alpha-D-Mannosyl)-D-glycerate,Carbohydrate Acid,Carbohydrates/Derivatives,
+Maltopentaose,Polysaccharide,Carbohydrates/Derivatives,
+Glycylglycine C4H8N2O3,Peptide,Peptides,
+Beta D-Galactose,Carbohydrate - other,Carbohydrates/Derivatives,
+1 4 Diguanidinobutane,Amine,Amines/Amides,
+L Arginine phosphate C6H14N4O5P,Amino Acid Derivative,Amino Acids/Derivatives,
+R  Acetoin C4H8O2,Keytone,Ketones/Aldehydes,carbonyl
+N-Acetyl-L-glutamate,Amino Acid Derivative,Amino Acids/Derivatives,
+L-Rhamnose,Monosaccharide,Carbohydrates/Derivatives,
+"Beta-1,3/1,4-glucan (Barley, n=6, Glc beta1->3,4 Glc)",Polysaccharide,Carbohydrates/Derivatives,gulcan
+Xylotriose,Glycan,Carbohydrates/Derivatives,glycan and trisaccharid
+Arbutin 6-phosphate,Carbohydrate - other,Carbohydrates/Derivatives,phospho sugar
+Xanthosine 5'-phosphate,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Salmochelin-S2-Fe-III,Siderophore,Other,
+O-Phospho-L-serine,Amino Acid Derivative,Amino Acids/Derivatives,phosphate
+Ala L glu L C8H13N2O5,Peptide,Peptides,
+N-Acetylmuramate,Carbohydrate Acid,Carbohydrates/Derivatives,
+L-alanine-D-glutamate,Peptide,Peptides,
+"Ferric 2,3-dihydroxybenzoylserine",Siderophore,Other,
+Vaccenic acid,Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+Urate C5H4N4O3,Purine - other,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Glycerol 2-phosphate,Other,Other,organophosphorus
+Hexanoate (n-C6:0),Fatty Acid,Phospholipids/Fatty Acids/Triglycerides,
+3 hydroxyheptanoic acid,3-Hydroxy-Carboxlic Acid,Carboxylic Acid,
+Tyramine,Amino Acid,Amino Acids/Derivatives,
+Cellulose (n=4 repeating units),Polysaccharide,Carbohydrates/Derivatives,
+(R)-mevalonate,Carboxylic Acid,Carboxylic Acid,
+D-Galactose,Monosaccharide,Carbohydrates/Derivatives,
+L-Galactonate,Carboxylic Acid,Carboxylic Acid,
+L glycinylglutamate,Peptide,Peptides,
+4-Hydroxybenzaldehyde,Aldehyde,Ketones/Aldehydes,
+Triacylglycerol  octadecanoate,Triacylglycerol,Phospholipids/Fatty Acids/Triglycerides,
+Triacylglycerol  nC182d9d12,Triacylglycerol,Phospholipids/Fatty Acids/Triglycerides,
+Dimethyl sulfone,Organic Sulphur,Organic Sulfur,
+Beta alanylL leucine,Peptide,Peptides,weird peptide
+Myo-Inositol hexakisphosphate,Other,Other,6 carbon ring with phosphate groups at every point
+5-Dehydro-D-gluconate,Carbohydrate Acid,Carbohydrates/Derivatives,
+L-Idonate,Carboxylic Acid,Carboxylic Acid,
+L-Carnitine,Amine,Amines/Amides,quatrinary amine
+L-Homocysteine,Amino Acid,Amino Acids/Derivatives,
+D-Lactate,Carboxylic Acid,Carboxylic Acid,
+Salmochelin-S4-Fe-III,Siderophore,Other,
+3 Hydroxydodecanoic 6 en acid,3-Hydroxy-Carboxlic Acid,Carboxylic Acid,
+Isethionic acid,Organic Sulphur,Organic Sulfur,
+Salicylate,Carboxylic Acid,Carboxylic Acid,benzene ring
+Ethanesulfonate,Organic Sulphur,Organic Sulfur,
+Glycol,Alcohol,Alcohol,
+Ribitol,Carbohydrate - other,Carbohydrates/Derivatives,sugar alcohol
+Coniferol,Other,Other,
+Isethionate C2H5O4S,Organic Sulphur,Organic Sulfur,
+2-Oxoarginine,Carboxylic Acid,Carboxylic Acid,has amino group
+"Xylan (4 backbone units, 1 glcur side chain)",Polysaccharide,Carbohydrates/Derivatives,
+Phosphonate,Other,Other,phosphonate
+1-O-methyl-Beta-D-glucuronate,Carbohydrate - other,Carbohydrates/Derivatives,
+D Galactarate C6H8O8,Carboxylic Acid,Carboxylic Acid,
+D Galactosamine C6H13NO5,Monosaccharide,Carbohydrates/Derivatives,
+"Galactomannan(n=6 repeat units mannose, alpha-1,4 man)",Polysaccharide,Carbohydrates/Derivatives,
+3 Hydroxyphenylacetic acid C8H8O3,Carboxylic Acid,Carboxylic Acid,benzene
+"Galactomannan(n=4 repeat units mannose, alpha-1,4 man)",Polysaccharide,Carbohydrates/Derivatives,
+D-Xylonate,Carboxylic Acid,Carboxylic Acid,
+L-gulonate,Carboxylic Acid,Carboxylic Acid,
+"Xylan (8 backbone units, 2 glcur side chain)",Polysaccharide,Carbohydrates/Derivatives,
+Beta Methylglucoside C7H14O6,Other,Other,cant find
+D-Fructuronate,Carboxylic Acid,Carboxylic Acid,
+Gallic acid,Alcohol,Alcohol,polyphenol
+(R)-Glycerate,Carboxylic Acid,Carboxylic Acid,
+"Mannotriose (beta-1,4)",Polysaccharide,Carbohydrates/Derivatives,trisaccharide
+GTP C10H12N5O14P3,Nucleoside Deriviative,Nucleobases/Nucleosides/Nucleotides/Derivatives,
+Ethanesulfonate C2H5O3S,Organic Sulphur,Organic Sulfur,

@@ -45,7 +45,7 @@ do
     states="ensemble_states_tmp.csv"
 
     #First search for the reaction IDs and save it in a temporary file
-    `grep -e "reaction metaid" $xml_dir/$file | cut -d \" -f 2 > $reactions`
+    `grep -E "reaction id|reaction metaid" $xml_dir/$file | cut -d \" -f 2 > $reactions`
 
     #Now we will extract the ensemble states associated with each reaction ID and save as 
     #a temporary file

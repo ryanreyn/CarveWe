@@ -14,8 +14,8 @@ done
 
 #Establish the name of the files list and create that file and a directory to write 
 #all of the output files into
-filelist=${out_dir}"filenames.txt"
-dirname=${out_dir}"ensemble_rxn-info_files"
+filelist=${out_dir}"/filenames.txt"
+dirname=${out_dir}"/ensemble_rxn-info_files"
 
 if [[ -d $dirname ]]
 then
@@ -45,11 +45,11 @@ do
     states="ensemble_states_tmp.csv"
 
     #First search for the reaction IDs and save it in a temporary file
-    `grep -E "reaction id|reaction metaid" $xml_dir/$file | cut -d \" -f 2 > $reactions`
+    `grep -E "reaction id|reaction metaid" $xml_dir/$file | cut -d \" -f 2 | sed "s/meta_//g" > $reactions`
 
     #Now we will extract the ensemble states associated with each reaction ID and save as 
     #a temporary file
-    `grep -e "ENSEMBLE_STATE" $xml_dir/$file | cut -d : -f 2 | cut -d '<' -f 1 | sed 's/ /,/2g' > $states`
+    `grep -e "ENSEMBLE_STATE" $xml_dir/$file | grep -E -o "[01]( [01])" | tr " " "," > $states`
 
     #Using the paste command to combine the two files and then removing our temporary files
     `paste -d , $reactions $states > $savename`

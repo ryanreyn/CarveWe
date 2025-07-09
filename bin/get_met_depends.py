@@ -145,15 +145,15 @@ cats = ['Carboxylic Acid', 'Other', 'Ketones/Aldehydes',
 
 
 #pull in the media data with headers
-data = pd.read_csv('%sreformatted_media_data.csv' %(work_dir), index_col = 0)
+data = pd.read_csv('%s/reformatted_media_data.csv' %(work_dir), index_col = 0)
 #data = data.fillna(0)
 
 #pull in the classified metabolite data
-met_class = pd.read_csv('%sclassified_metabolites.csv' %(data_dir), index_col=0)
+met_class = pd.read_csv('%s/classified_metabolites.csv' %(data_dir), index_col=0)
 
 #load in the metabolite names dictionary
 #pull in the data
-met_names_df = pd.read_csv('%sall_max_flux_met_names.csv' %(work_dir), index_col = 0)
+met_names_df = pd.read_csv('%s/all_max_flux_met_names.csv' %(work_dir), index_col = 0)
 met_names = met_names_df.squeeze()
 
 #loop though the genomes
@@ -171,8 +171,8 @@ for genome in genomes:
     sensitivity_info[genome] = {}
 
     #import model and reaction states
-    model = read_sbml_model('%sxml_files/%s.xml' %(work_dir, genome))
-    rxn_states = pd.read_csv('%sensemble_rxn-info_files/%s_rxn-info.csv' %(work_dir, genome), header = None, index_col=0)
+    model = read_sbml_model('%s/xml_files/%s.xml' %(work_dir, genome))
+    rxn_states = pd.read_csv('%s/ensemble_rxn-info_files/%s_rxn-info.csv' %(work_dir, genome), header = None, index_col=0)
 
     #subset temp dataframe for only the single genome
     min = data[data['model_name'] == genome].drop(columns= ['model_name', 'model_number', 'media_type', 'ensemble_size']).T
@@ -236,8 +236,8 @@ for genome in genomes:
 print(growth_info)
 
 cat_growth_info_df = pd.DataFrame.from_dict(growth_info)
-cat_growth_info_df.to_csv('%smodel_growth_rate_info_by_met_category_all_metabolites.csv' %(work_dir))
+cat_growth_info_df.to_csv('%s/model_growth_rate_info_by_met_category_all_metabolites.csv' %(work_dir))
 
 #output sensitivity info to a .csv as well
 sens_growth_info_df = pd.DataFrame.from_dict(sensitivity_info)
-sens_growth_info_df.to_csv('%smodel_sensitivity_by_met_category.csv' %(work_dir))
+sens_growth_info_df.to_csv('%s/model_sensitivity_by_met_category.csv' %(work_dir))

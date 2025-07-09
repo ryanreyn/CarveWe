@@ -2,6 +2,12 @@
 #This file is the main file that we will build out to incorporate submodules of our
 #genome annotation, model and media prediction, and growth sensitivity pipeline
 
+#Temporarily I am setting this to globally use our installed CarveMe mamba env
+#Need to modify this later when it itself is a conda package
+eval "$(conda shell.bash hook)"
+
+conda activate /project/nmherrer_110/tools/.conda/envs/CarveMe
+
 #Setting some colors to use for printing verbose output (inspired by Mike Lee)
 GREEN='\e[32m'
 RED='\e[31m'
@@ -38,11 +44,15 @@ help_menu()
     printf "        - [-t <int>] default: 1\n"
     printf "            Specify the number of threads for any multi-threading steps\n\n"
     printf "    ${LIGHTYELLOW}Run BLAST against genomes used to build SOM clusters:${NC}\n\n"
-    printf "        - [-b ] default: true\n"
+    printf "        - [-b ] default: false\n"
     printf "            Specify whether you wish to run the BLAST comparison or not\n\n"
+    printf "            The BLAST alignment typically takes about an hour to run\n\n"
     printf "    ${LIGHTYELLOW}Model ensemble size for the carving subprocess:${NC}\n\n"
     printf "        - [-e <int>] default: 2\n"
     printf "            Specify how many independent models for carve to generate for each genome\n\n"
+    printf "    ${LIGHTYELLOW}Model ensemble size for the carving subprocess:${NC}\n\n"
+    printf "        - [-s <int>] default: false\n"
+    printf "            Specify whether to skip carveme model predictions\n\n"
 
     exit
 }
@@ -70,11 +80,12 @@ num_threads=1
 fna_type='false'
 faa_type='false'
 ensemble_size=2
-run_blast='true'
+run_blast='false'
 data_dir='../ref_data'
+skip_carving='false'
 
 #Establish the options for this program
-while getopts p:dano:t:e:b args
+while getopts p:dano:t:e:bs args
 do
     case ${args} in
         p) fasta_file=${OPTARG};;
@@ -84,29 +95,53 @@ do
         o) out_dir=${OPTARG};;
         t) num_threads=${OPTARG};;
         e) ensemble_size=${OPTARG};;
-        b) run_blast='false';;
+        b) run_blast='true';;
+        s) skip_carving='true';;
         \?) printf "\n  ${RED}Invalid argument: -${OPTARG}${NC}\n\n    Run 'CarveWe' with no arguments, '-h', or '--help' only to see help menu.\n\n" >&2 && exit
     esac
 done
 
+#Normalizing directories to remove any lagging "/" symbols
+out_dir=`echo "${out_dir%/}"`
+data_dir=`echo "${data_dir%/}"`
+
+
+#Initialize the log file for error output
+touch $out_dir"/log.txt"
+
+##### This section will only run if the user elects to run the BLAST subprocess ######
+##### It will pull the necessary genome files from the web and build BLAST db ########
+#Contain the process within a file check to see if the user has already generated the
+#blast files
+if [ "$run_blast" == "true" ]
+then
+    printf "${YELLOW}You have elected to run the BLAST, checking if the database files exist.${NC}\n\n"
+    if [ "$fna_type" == "true" ] && [ ! -f  "$data_dir/carvewe-hq-genomes.nhr" ]
+    then 
+        printf "${RED}BLAST database files not found, so we will generate them.${NC}\n\n"
+        construct-db.sh -n -o $out_dir -p $num_threads
+    elif [ "$faa_type" == "true" ] && [ ! -f "$data_dir/carvewe-protein-seqs.pdb" ]
+    then
+        printf "${RED}BLAST database files not found, so we will generate them.${NC}\n\n"
+        construct-db.sh -a -o $out_dir -p $num_threads
+    fi
+else
+    printf "${YELLOW}You have already generated the BLAST database files!${NC}\n\n"
+fi
 ###### This section will run the first subprocess to BLAST input genomes to SOM ######
 ###### genomes ############################################
 #This first subprocess is optional so we will enclose it in a conditional based on
 #user flag inputs
 if [ "$run_blast" == "true" ]
 then
-    blastdb_dir="../blastdb_files" #This needs to be adjusted when this is released as 
-    #a package.
     printf " ${YELLOW}BLAST database files to be used:${NC}\n\n"
 
     if [ "$fna_type" = 'true' ]
     then
-        blastdb_file="$blastdb_dir/carvewe-hq-genomes"
         printf " ${YELLOW}carvewe-hq-genomes. This is a database file of the nucleotide${NC}\n"
         printf " ${YELLOW}sequences from all of the CarveWe genomes${NC}\n\n"
     elif [ "$faa_type" = 'true' ]
     then
-        blastdb_file="$blastdb_dir/carvewe-protein-seqs"
         printf " ${YELLOW}carvewe-protein-seqs. This is a database file of the amino acid${NC}\n"
         printf " ${YELLOW}sequences from all of the CarveWe genomes${NC}\n\n"
     fi
@@ -116,12 +151,12 @@ then
     
     if [ "$fna_type" == true ]
     then
-        genome-blast.sh -p ${fasta_file} -d ${fasta_dir} -n \
-        -o ${out_dir} -t ${num_threads} -b ${blastdb_file}
+        genome-aligner.sh -p ${fasta_file} -d ${fasta_dir} -n \
+        -o ${out_dir} -t ${num_threads}
     elif [ "$faa_type" == true ]
     then
-        genome-blast.sh -p ${fasta_file} -d ${fasta_dir} -a \
-        -o ${out_dir} -t ${num_threads} -b ${blastdb_file}
+        genome-aligner.sh -p ${fasta_file} -d ${fasta_dir} -a \
+        -o ${out_dir} -t ${num_threads}
     fi
 else
     printf "${YELLOW}Skipping the BLAST alignment step!${NC}\n\n"
@@ -130,17 +165,35 @@ fi
 ##### This section will run segments of the CarveWe pipeline for users interested in
 #processing their own genomes through CarveMe, COBRApy, and metabolic sensitivity####
 #Run the model carving and reaction info extraction subprocess
-printf "${YELLOW}Running the provided genomes through CarveMe to annotate metabolic models:${NC}\n\n"
-
-if [ "$fna_type" == 'true' ]
+if [ "$skip_carving" == 'true' ]
 then
-    run-carveme.sh -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size}
+    printf "${YELLOW}Skipping the model prediction step!${NC}\n\n"
 else
-    run-carveme.sh -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size}
+    printf "${YELLOW}Running the provided genomes through CarveMe to annotate metabolic models:${NC}\n\n"
+
+    if [ "$fna_type" == 'true' ]
+    then
+        run-carveme.sh -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+        -p ${num_threads}
+    else
+        run-carveme.sh -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+        -p ${num_threads}
+    fi
+
+    #Building a subprocess here to extract model quality and generate some analytical plots
+    #for users to examine 
+    xml_dir=$out_dir"/xml_files"
+    if [[ "$ensemble_size" -ge 10 ]]
+    then
+        printf "${YELLOW}Passing model files to an ensemble quality prediction subprocess${NC}\n\n"
+        python extract-model-quality.py -d $xml_dir -w $out_dir
+    else
+        printf "${RED}The specified ensemble size is too small to reliably analyze within ensemble model differences${NC}\n\n"
+    fi
 fi
 
 #Now we will pass the xml and reaction info files to the COBRApy subprocess
-media_dir=$out_dir"media_files"
+media_dir=$out_dir"/media_files"
 if [ -d "$media_dir" ]
 then
     rm -r $media_dir
@@ -152,7 +205,7 @@ fi
 #Create a temporary file with all of the genome files (dropping the fasta extension)
 printf "${YELLOW}\nRunning the SBML CarveMe model files through COBRApy for media prediction:${NC}\n\n"
 
-genome_list=$out_dir"tmp-genomes-list.txt"
+genome_list=$out_dir"/tmp-genomes-list.txt"
 ls $fasta_file*.f[an]a | sed "s/\.f[an]a//g; s/.*\///g" > $genome_list
 
 while read genome

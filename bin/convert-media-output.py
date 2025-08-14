@@ -140,11 +140,11 @@ max_flux.replace(0, np.nan, inplace=True)
 
 #replace column names with the model names
 columns = headers.columns
-headers.set_axis(headers.loc['model_name'].to_list(), axis='columns', inplace=True) 
+headers = headers.set_axis(headers.loc['model_name'].to_list(), axis='columns') 
 #set column names to model names
 
 #set back the index to the original index
-headers.set_axis(columns, axis ='columns', inplace = True)
+headers = headers.set_axis(columns, axis ='columns')
 
 #concatinate the headers and the data
 data = pd.concat([headers, max_flux])

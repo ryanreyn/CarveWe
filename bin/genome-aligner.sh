@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #This is a process that is also integrated into the CarveWe tool enables a user to
 #provide their own genome(s) and get the closest hit to a SOM cluster via BLAST
 #Establish some flags for reading user input and providing help

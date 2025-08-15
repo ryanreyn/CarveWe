@@ -1,0 +1,27 @@
+# .github/workflows/build-linux.yml
+name: Build Linux
+
+on: [push, pull_request]
+
+jobs:
+  linux64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, tags: true }
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          use-mamba: true
+          activate-environment: build-carvewe
+      - name: Install build tools
+        shell: bash -l {0}
+        run: mamba install -y conda-build boa
+      - name: Build
+        shell: bash -l {0}
+        run: conda mambabuild conda_recipe
+      - name: Show artifact path
+        shell: bash -l {0}
+        run: conda build conda_recipe --output

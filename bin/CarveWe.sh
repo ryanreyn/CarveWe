@@ -2,12 +2,6 @@
 #This file is the main file that we will build out to incorporate submodules of our
 #genome annotation, model and media prediction, and growth sensitivity pipeline
 
-#Temporarily I am setting this to globally use our installed CarveMe mamba env
-#Need to modify this later when it itself is a conda package
-eval "$(conda shell.bash hook)"
-
-conda activate /project/nmherrer_110/tools/.conda/envs/CarveMe
-
 #Setting some colors to use for printing verbose output (inspired by Mike Lee)
 GREEN='\e[32m'
 RED='\e[31m'

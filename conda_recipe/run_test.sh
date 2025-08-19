@@ -6,8 +6,8 @@ command -v carvewe
 command -v genome-aligner
 
 # Help should succeed quickly
-CarveWe.sh --help >/dev/null
-genome-aligner.sh --help >/dev/null
+carvewe --help >/dev/null
+genome-aligner --help >/dev/null
 
 # Data dir (optional)
 test -d "${CARVEWE_SHARE:-$PREFIX/share/carvewe}" || true

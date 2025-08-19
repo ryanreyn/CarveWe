@@ -5,11 +5,6 @@ on: [push, pull_request]
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    env:
-      # Build from the exact commit under test and mark as a dev version
-      CARVEWE_GIT_REV: ${{ github.sha }}
-      CONDA_PKG_VERSION: 0.dev${{ github.run_number }}
-      PKG_BUILD_STRING: ci_${{ github.sha.substr(0,7) }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,6 +18,12 @@ jobs:
           channel-priority: strict
           use-mamba: true
           activate-environment: build-carvewe
+
+      - name: Export vars
+        run: |
+          echo "CARVEWE_GIT_REV=$GITHUB_SHA" >> $GITHUB_ENV
+          echo "CONDA_PKG_VERSION=0.dev${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          echo "PKG_BUILD_STRING=ci${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Install build tools
         shell: bash -l {0}

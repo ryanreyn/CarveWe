@@ -1,0 +1,91 @@
+name: Bootstrap LevineLab mirror PR (latest or chosen tag)
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Specific tag to sync (optional). If empty, latest GitHub release is used."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  LAB_REPO: LevineLab/CarveWe
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pick tag to sync
+        id: pick
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INPUT_TAG}" ]]; then
+            TAG="${INPUT_TAG}"
+          else
+            TAG=$(curl -s https://api.github.com/repos/ryanreyn/CarveWe/releases/latest | jq -r .tag_name)
+            if [[ "$TAG" == "null" || -z "$TAG" ]]; then
+              echo "No releases found. Provide a tag input (e.g., v1.2.3)."
+              exit 1
+            fi
+          fi
+          # Strict SemVer vX.Y.Z (adjust if you allow pre-releases)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Chosen tag '$TAG' is not SemVer (vX.Y.Z)."
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Check out the chosen tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.pick.outputs.tag }}
+
+      - name: Configure cosmetic author
+        run: |
+          git config user.name "LevineLab Sync Bot"
+          git config user.email "levinelab-sync@users.noreply.github.com"
+
+      - name: Push bootstrap branch to lab repo
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+          LAB_PUSH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="bootstrap-${TAG}"
+          git remote add lab https://x-access-token:${LAB_PUSH_TOKEN}@github.com/${{ env.LAB_REPO }}.git
+          git checkout -B "$BRANCH" "$TAG"
+          git push lab "$BRANCH:$BRANCH" --force
+
+      - name: Open PR on lab repo (idempotent)
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+          LAB_PUSH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
+          LAB_REPO: ${{ env.LAB_REPO }}
+        run: |
+          set -euo pipefail
+          TITLE="Bootstrap sync upstream ${TAG}"
+          BODY="Initial mirror PR for upstream release ${TAG}."
+          HEAD="bootstrap-${TAG}"
+          BASE="main"
+
+          existing=$(curl -s -H "Authorization: token ${LAB_PUSH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${LAB_REPO}/pulls?state=open&head=${LAB_REPO%%/*}:${HEAD}")
+          if echo "$existing" | jq -e 'length > 0' >/dev/null; then
+            echo "PR already exists for ${HEAD} → ${BASE}. Skipping creation."
+            exit 0
+          fi
+
+          payload=$(jq -n --arg title "$TITLE" --arg head "$HEAD" --arg base "$BASE" --arg body "$BODY" \
+                     '{title:$title, head:$head, base:$base, body:$body}')
+
+          curl -s -H "Authorization: token ${LAB_PUSH_TOKEN}" \
+               -H "Accept: application/vnd.github+json" \
+               -X POST "https://api.github.com/repos/${LAB_REPO}/pulls" \
+               -d "$payload" >/dev/null

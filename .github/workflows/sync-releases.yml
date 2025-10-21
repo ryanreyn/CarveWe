@@ -1,0 +1,89 @@
+name: Sync release to LevineLab (gated majors)
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  LAB_REPO: LevineLab/CarveWe
+  # Pipe-separated major prefixes to sync: e.g., "v1|v2" or just "v2"
+  ALLOWED_MAJORS: "v0|v1"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate by allowed majors
+        id: gate
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          # Strict SemVer vX.Y.Z (tweak if needed)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag $TAG is not SemVer (vX.Y.Z). Skipping."
+            echo "ok=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          if [[ "$TAG" =~ ^(${ALLOWED_MAJORS})\..* ]]; then
+            echo "ok=true" >> $GITHUB_OUTPUT
+          else
+            echo "Tag $TAG major not in (${ALLOWED_MAJORS}). Skipping."
+            echo "ok=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Stop if gated out
+        if: steps.gate.outputs.ok != 'true'
+        run: exit 0
+
+      - name: Check out the released tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Configure cosmetic author
+        run: |
+          git config user.name "ryanreyn"
+        # Use a noreply if you like:
+        #  git config user.email "levinelab-sync@users.noreply.github.com"
+
+      - name: Push release branch to lab repo
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          LAB_PUSH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="upstream-${TAG}"
+          git remote add lab https://x-access-token:${LAB_PUSH_TOKEN}@github.com/${{ env.LAB_REPO }}.git
+          git checkout -B "$BRANCH" "$TAG"
+          git push lab "$BRANCH:$BRANCH" --force
+
+      - name: Open PR on lab repo (idempotent)
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          LAB_PUSH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
+          LAB_REPO: ${{ env.LAB_REPO }}
+        run: |
+          set -euo pipefail
+          TITLE="Sync upstream ${TAG}"
+          BODY="Automated PR to sync upstream release ${TAG}."
+          HEAD="upstream-${TAG}"
+          BASE="main"
+
+          existing=$(curl -s -H "Authorization: token ${LAB_PUSH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${LAB_REPO}/pulls?state=open&head=${LAB_REPO%%/*}:${HEAD}")
+          if echo "$existing" | jq -e 'length > 0' >/dev/null; then
+            echo "PR already exists for ${HEAD} → ${BASE}. Skipping creation."
+            exit 0
+          fi
+
+          payload=$(jq -n --arg title "$TITLE" --arg head "$HEAD" --arg base "$BASE" --arg body "$BODY" \
+                     '{title:$title, head:$head, base:$base, body:$body}')
+
+          curl -s -H "Authorization: token ${LAB_PUSH_TOKEN}" \
+               -H "Accept: application/vnd.github+json" \
+               -X POST "https://api.github.com/repos/${LAB_REPO}/pulls" \
+               -d "$payload" >/dev/null

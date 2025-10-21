@@ -1,0 +1,67 @@
+name: Release (conda)
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  integration:
+    uses: ./.github/workflows/integration.yml
+
+  build-upload:
+    needs: integration
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-13]   # macos-13 = Intel runner (osx-64)
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set version/ref from tag
+        shell: bash
+        run: |
+          echo "CONDA_PKG_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+          echo "CARVEWE_GIT_REV=${GITHUB_REF_NAME}"     >> $GITHUB_ENV
+          echo "PKG_BUILD_STRING=g${GITHUB_SHA::7}"     >> $GITHUB_ENV
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          channels: conda-forge,bioconda
+          channel-priority: strict
+          use-mamba: true
+          activate-environment: build-carvewe
+
+      - name: Install build tools
+        shell: bash -l {0}
+        run: mamba install -y conda-build boa anaconda-client
+
+      - name: Build
+        shell: bash -l {0}
+        run: conda mambabuild conda_recipe
+
+      - name: Resolve package path
+        id: out
+        shell: bash -l {0}
+        run: echo "pkg=$(conda build conda_recipe --output)" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact (for record)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ runner.os }}-conda-pkg
+          path: ${{ steps.out.outputs.pkg }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload to Anaconda.org
+        if: success()
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
+        shell: bash -l {0}
+        run: |
+          test -n "$ANACONDA_API_TOKEN" || { echo "Missing ANACONDA_API_TOKEN secret"; exit 1; }
+          anaconda -t "$ANACONDA_API_TOKEN" upload --label main "${{ steps.out.outputs.pkg }}"

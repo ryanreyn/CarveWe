@@ -40,7 +40,7 @@ def find_min_medias(model):
   solution = model.slim_optimize()
 
   #run the minimal media function to create an ensemble of up to 10 minimal media outputs
-  min_components = minimal_medium(model, solution, minimize_components=10)
+  min_components = minimal_medium(model, solution, minimize_components=True)
 
   #this minimal media function maximizes flux but does not minimize number of components
   max_flux = minimal_medium(model, solution, minimize_components=False)
@@ -165,6 +165,9 @@ model = read_sbml_model('%s/xml_files/%s.xml' %(work_dir, genome))
 rxn_info_path = ('%s/ensemble_rxn-info_files/%s_rxn-info.csv' %(work_dir, genome))
 rxn_states = pd.read_csv(rxn_info_path, header = None, index_col=0)
 
+#Hard set model solver, we will reinstantiate this on each ensemble run too
+model.solver = "cplex"
+
 #Load the ensemble mapping for externally identified reactions to model object reactions
 ensemble_map = load_ensemble_map(rxn_info_path)
 
@@ -247,6 +250,9 @@ for j in range(num_models): #column indexing variable
     #     if rxn.id.startswith("EX_"):
     #         print(f"{rxn.id:25s} : lb = {rxn.lower_bound:8.2f}, ub = {rxn.upper_bound:8.2f}")
 
+    #Add a couple of lines to try to force dump and reinstantiate solver object
+    temp_model.solver = "cplex"
+
     growth = temp_model.slim_optimize()
     print(f"[ENSEMBLE {j}] Growth rate after knockouts: {growth}")
 
@@ -285,10 +291,9 @@ for j in range(num_models): #column indexing variable
       header = pd.DataFrame([model_name, model_number, media_type, ensemble_size], columns = min_media.columns, index = ['model_name', 'model_number', 'media_type', 'ensemble_size'])
       #append header info to headers dataframe
       headers = pd.concat([headers, header], axis=1)
-      
+    
     except AttributeError:
-      print('Media could not be found for %s ensemble' %(genome))
-
+      print('Media could not be found for %s ensemble %d' %(genome, j))
 
 #add metabolite names
 all_media = add_met_names(model, media_recipes)

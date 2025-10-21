@@ -51,6 +51,13 @@ jobs:
           git config user.name "Ryan Reynolds"
           git config user.email "ryanreyn@users.noreply.github.com"
 
+      - name: Verify PAT is present
+        run: |
+          if [ -z "${{ secrets.LAB_PUSH_TOKEN }}" ]; then
+            echo "LAB_PUSH_TOKEN is not set or unavailable to this workflow run."
+            exit 1
+          fi
+
       - name: Push bootstrap branch to lab repo
         env:
           TAG: ${{ steps.pick.outputs.tag }}

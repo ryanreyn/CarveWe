@@ -38,7 +38,7 @@ jobs:
 
       - name: Configure git with PAT
         run: |
-          git config user.name "LevineLab Sync Bot"
+          git config user.name "Ryan Reynolds"
           git config user.email "levinelab-sync@users.noreply.github.com"
           git config --global url."https://x-access-token:${{ secrets.LAB_PUSH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 

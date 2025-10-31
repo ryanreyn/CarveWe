@@ -200,7 +200,7 @@ fi
 printf "${YELLOW}\nRunning the SBML CarveMe model files through COBRApy for media prediction:${NC}\n\n"
 
 genome_list=$out_dir"/tmp-genomes-list.txt"
-ls $fasta_file*.f[an]a | sed "s/\.f[an]a//g; s/.*\///g" > $genome_list
+ls $out_dir/xml_files/*.xml | sed "s/\.xml//g; s/.*\///g" > $genome_list
 
 while read genome
 do

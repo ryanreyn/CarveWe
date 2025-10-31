@@ -3,50 +3,66 @@ import pandas as pd
 import optparse
 import os
 import seaborn as sns
+import matplotlib.pyplot as plt
 
 #Set up argument parsing
 if __name__ == '__main__':
-    parser = optparse.OptionParser()
-	parser.add_option('-d', '--directory', type='int', dest='file_dir',
+	parser = optparse.OptionParser()
+	parser.add_option('-d', '--directory', type='string', dest='file_dir',
 					  help="provide the directory that contains the model files")
-	parser.add_option('-w', '--work-directory', type='int', dest='work_dir',
+	parser.add_option('-w', '--work-directory', type='string', dest='work_dir',
 					  help="provide the working directory where the compiled output should go")
 	#Convert input opts and args to python variables
-    file=opts.file_list
-	file_dir=opts.file_dir
-	work_dir=opts.out_dir
+	opts, args = parser.parse_args()
+
+	file_dir = opts.file_dir
+	work_dir = opts.work_dir
+
+	if not file_dir or not work_dir:
+		parser.error("Both directory (-d) and work-directory (-w) are required")
 
 #This script will take files from a directory and extract their model consensus
 #Then we'll add it to a csv file for analysis
-directory = os.fsencode('%s/%s' %(work_dir, file_dir))
-os.listdir(directory)
+input_dir = os.path.join(file_dir)  # Use file_dir directly as it's already the input path
+if not os.path.exists(input_dir):
+    raise ValueError(f"Input directory does not exist: {input_dir}")
 
+# Create output directory if it doesn't exist
+os.makedirs(work_dir, exist_ok=True)
 
-#read in an individual file
-#loop through all the files in the folder
-for file in os.listdir(directory):
-  filename = os.fsdecode(file)
+save_data = [["Genome", "Consensus"]]  # Initialize results list
+# Process each file in the input directory
+for filename in os.listdir(input_dir):
+	if not filename.endswith('_rxn-info.csv'):
+		continue
+	
+	# Get full file path and genome name
+	file_path = os.path.join(input_dir, filename)
+	genome = filename.replace('_rxn-info.csv', '')
+	
+	try:
+		# Read and process the CSV file
+		curr_data = pd.read_csv(file_path)
+		per_rxn_consensus = curr_data.sum(numeric_only=True, axis=1) / 60
+		avg_consensus = per_rxn_consensus.mean()
+		data_row = [genome, avg_consensus]
+		save_data.append(data_row)
+	except Exception as e:
+		print(f"Error processing {filename}: {str(e)}")
 
-save_data=[["Genome","Consensus"]]
-for file in os.listdir(directory):
-	curr_file=os.fsdecode(file)
-	if filename.endswith('_rxn-info.csv'):
-    	#parse name of model
-    	genome=filename.replace('_rxn-info.csv', '') #filename without ending
+# Create DataFrame and save to CSV
+save_df = pd.DataFrame(save_data[1:], columns=save_data[0])  # Use first row as column names
+output_csv = os.path.join(work_dir, "quality-data.csv")
+save_df.to_csv(output_csv, index=False)
 
-	genome=curr_file.replace("_rxn-info.csv","")
-	curr_data=pd.read_csv(curr_file)
-	per_rxn_consensus=curr_data.sum(numeric_only=True,axis=1)/60
-	avg_consensus=per_rxn_consensus.mean()
-	data_row=[genome,avg_consensus]
-	save_data.append(data_row)
+# Create and save quality histogram
+plt.figure(figsize=(10, 6))
+quality_hist = sns.histplot(data=save_df, x="Consensus", kde=True)
+plt.title("Model Quality Distribution")
+plt.xlabel("Consensus Score")
+plt.ylabel("Count")
 
-save_df=pd.DataFrame(save_data)
-pd.DataFrame.to_csv(save_df,"%s/quality-data.csv" %(work_dir),header=False,index=False,quoting=None)
-
-#We want to extend this script to generate some seaborn plots of metrics related to
-#model quality (potential for adding an exploratory tool for picking ensemble size)
-quality_df=save_df
-
-quality_hist=sns.histplot(data=quality_df, x="Consensus", y="Count", kde=True)
-quality_hist.savefig("model-quality-histogram.png")
+# Save plot
+output_plot = os.path.join(work_dir, "model-quality-histogram.png")
+plt.savefig(output_plot)
+plt.close()

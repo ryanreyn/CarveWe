@@ -2,6 +2,39 @@
 ## Overview
 **CarveWe** is a comprehensive workflow that integrates other open source tools, chiefly the CarveMe model annotation [software](https://github.com/cdanielmachado/carveme), and offers several distinct applications for metabolic modeling. Principally the complete workflow was designed to apply SOM neural networks to feature data of metabolic sensitivities based on *in silico* nutrient limitation tests in order to group marine heterotrophic organisms into functional cohorts. These cohorts were then contextualized with information from a variety of data streams. This effort is described in full detail in this [publication](https://www.biorxiv.org/content/10.1101/2024.05.29.596556v1.abstract). We offer **CarveWe** here as a CLI based tool that allows users to align their own genomes to the genomes used to develop our metabolic clusters, as well as annotate metabolic sensitivities *de novo* with their own selection of genomes. Currently, **CarveWe** supports both amino acid (.faa) and nucleotide (.fna) fasta files, though CarveMe performs optimally with amino acid fasta files. For more information on the workflow, including how to install and use it feel free to refer to the [wiki](https://github.com/ryanreyn/CarveWe/wiki).
 
+## Installation
+
+### Prerequisites
+CarveWe requires IBM CPLEX with an academic license. [See CPLEX setup guide](docs/CPLEX_SETUP.md).
+
+### Quick Install
+First create a new conda environment and install the carvewe package into this environment:
+```bash
+conda create -n carvewe python=3.12
+conda activate carvewe
+conda install -c ryanreyn carvewe
+```
+
+Then install the community edition CPLEX that is publicly available to access the Python API
+```bash
+pip install cplex
+```
+
+Then install your CPLEX binaries while the environment is active (to ensure the binaries correctly identify `$CONDA_PREFIX`):
+```bash
+./cplex_studio_installer.bin -i console \
+  -DUSER_INSTALL_DIR=$CONDA_PREFIX/ilog \
+  -DLICENSE_ACCEPTED=TRUE
+```
+
+Deactivate and reactivate your environment. Your environment will automatically be configured to enable your fully licensed CPLEX which can be verified with `carvewe-check-cplex`:
+```bash
+conda deactivate
+conda activate carvewe
+
+carvewe-check-cplex
+```
+
 ## Genome alignment
 For users interested in a streamlined method to align their genomes of interest to the genomes associated with each of our 8 metabolic clusters, we provide a CLI integrated tool *genome-aligner*. With *genome-aligner* a user can simply provide the path to an individual fasta file or directory of fasta files and generate a report detailing the closest matching genome and its associated metabolic cluster. Currently, this tool supports nucleotide and amino acid fasta sequences. This alignment is done by performing a best hit BLAST from the query genome(s) to a pre-made blast database of the fasta sequences from the CarveWe paper using the appropriate BLAST program for the input file type.
 

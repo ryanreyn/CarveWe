@@ -17,18 +17,23 @@ build:
 
 requirements:
   host:
+    - python >=3.10,<3.13
     - bash
+    - pip
     - coreutils
   run:
     - bash
     - coreutils
     - numpy==2.2.3
     - carveme==1.6.4
-    - python >=3.10
+    - python >=3.10,<3.13
     - pandas
     - cobra==0.29.1
     - reframed==1.6.0
     - diamond
+    - lxml
+    - seaborn
+    - matplotlib
     - python-libsbml
 
 test:
@@ -46,6 +51,9 @@ about:
     CarveWe provides a modular, well-documented Bash CLI that orchestrates
     genome-driven metabolic model building, annotation, growth simulation,
     and media prediction.
+    
+    Note: Full CPLEX functionality requires IBM CPLEX binaries with an academic
+    license. See CPLEX_SETUP.md for installation instructions.
   dev_url: https://github.com/ryanreyn/CarveWe
 
 extra:

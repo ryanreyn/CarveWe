@@ -1,5 +1,5 @@
 {% set name = "carvewe" %}
-{% set version = environ.get('CONDA_PKG_VERSION', '0.dev0') %}
+{% set version = environ.get('CONDA_PKG_VERSION', '0.5.0') %}
 {% set buildstr = environ.get('PKG_BUILD_STRING', 'local') %}
 
 package:
@@ -8,7 +8,7 @@ package:
 
 source:
   git_url: https://github.com/ryanreyn/CarveWe.git
-  git_rev: {{ environ.get('CARVEWE_GIT_REV', 'dev') }}
+  git_rev: {{ environ.get('CARVEWE_GIT_REV', 'HEAD') }}
 
 build:
   number: 0

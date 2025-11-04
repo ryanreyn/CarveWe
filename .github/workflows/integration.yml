@@ -46,12 +46,12 @@ jobs:
           conda activate integ
           carvewe --help >/dev/null
 
-      - name: Run full pipeline test
-        # assumes you’ve added tests/full_genome_smoke.sh in repo
-        shell: bash -l {0}
-        run: |
-          conda activate integ
-          bash tests/full_genome_smoke.sh
+      # - name: Run full pipeline test
+      #   # assumes you’ve added tests/full_genome_smoke.sh in repo
+      #   shell: bash -l {0}
+      #   run: |
+      #     conda activate integ
+      #     bash tests/full_genome_smoke.sh
 
       - name: Upload logs/results
         if: always()

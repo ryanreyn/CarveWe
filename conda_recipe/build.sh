@@ -33,8 +33,12 @@ cat > "$PREFIX/etc/conda/activate.d/carvewe_cplex.sh" << 'EOF'
 
 # Only proceed if ilog directory exists
 if [ -d "$CONDA_PREFIX/ilog" ]; then
-    # Find CPLEX installation (handle multiple versions, use newest)
-    CPLEX_VERSION_DIR=$(ls -1 "$CONDA_PREFIX/ilog" | grep "^cplex_" | sort -V | tail -n 1)
+    # Find CPLEX installation (handle both versioned and unversioned directories)
+    if [ -d "$CONDA_PREFIX/ilog/cplex" ]; then
+        CPLEX_VERSION_DIR="cplex"
+    else
+        CPLEX_VERSION_DIR=$(ls -1 "$CONDA_PREFIX/ilog" | grep "^cplex" | sort -V | tail -n 1)
+    fi
     
     if [ -n "$CPLEX_VERSION_DIR" ]; then
         export CPLEX_HOME="$CONDA_PREFIX/ilog/$CPLEX_VERSION_DIR/cplex"

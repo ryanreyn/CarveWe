@@ -41,15 +41,29 @@ if [ -d "$CONDA_PREFIX/ilog" ]; then
     fi
     
     if [ -n "$CPLEX_VERSION_DIR" ]; then
-        export CPLEX_HOME="$CONDA_PREFIX/ilog/$CPLEX_VERSION_DIR/cplex"
+        # The main CPLEX directory contains binaries
+        export CPLEX_HOME="$CONDA_PREFIX/ilog/$CPLEX_VERSION_DIR"
+        
+        # CPLEX_STUDIO_DIR must point to the parent ilog directory for 22.1.x
+        export CPLEX_STUDIO_DIR="$CONDA_PREFIX/ilog"
         
         # Add CPLEX libraries to library path
         if [ -d "$CPLEX_HOME/bin/x86-64_linux" ]; then
             export LD_LIBRARY_PATH="$CPLEX_HOME/bin/x86-64_linux:${LD_LIBRARY_PATH:-}"
         fi
         
-        # Set CPLEX_STUDIO_DIR for other tools that may need it
-        export CPLEX_STUDIO_DIR="$CONDA_PREFIX/ilog/$CPLEX_VERSION_DIR"
+        # Clear any existing license file settings that might interfere
+        unset ILOG_LICENSE_FILE
+        
+        # CPLEX 22.1.x specific settings
+        export CP_INSTALLER_DIR="$CONDA_PREFIX/ilog"
+        
+        # Ensure per-user license configuration
+        export IBM_DB_DIR="$HOME/.IBM/db2"
+        export IBM_DB_INSTALLER_REGISTRY="$HOME/.IBM/registry"
+        
+        # Create required directories if they don't exist
+        mkdir -p "$HOME/.IBM/db2" "$HOME/.IBM/registry" 2>/dev/null || true
         
         # Mark that we configured CPLEX (for deactivation)
         export _CARVEWE_CPLEX_CONFIGURED=1
@@ -132,6 +146,19 @@ def check_cplex():
         # Test if it's full or community edition
         try:
             c = cplex.Cplex()
+            # First check version
+            version = c.get_version()
+            print(f"   ✓ CPLEX Version: {version}")
+            
+            # Check license type
+            try:
+                lic_string = c._env._get_license_string()
+                if "academic" in lic_string.lower():
+                    print(f"   ✓ Academic license detected")
+            except:
+                pass  # Newer versions might not support this check
+                
+            # Test problem size limits
             c.variables.add(names=[f'x{i}' for i in range(2000)])
             c.solve()
             print(f"   ✓ FULL CPLEX (2000 variable test passed)")
@@ -140,8 +167,10 @@ def check_cplex():
             if 'size' in str(e).lower() or 'limit' in str(e).lower():
                 print(f"   ✗ COMMUNITY EDITION detected (limited to 1000 vars)")
                 print(f"      This will NOT work for CarveWe models!")
+                print(f"      Error: {e}")
             else:
                 print(f"   ? Test failed with: {e}")
+                print(f"      This might indicate a license configuration issue.")
     except ImportError:
         print(f"   ✗ cplex module not found")
         print(f"      Install with: pip install cplex")

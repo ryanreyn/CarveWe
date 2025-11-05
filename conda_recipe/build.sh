@@ -104,13 +104,20 @@ def check_cplex():
     if conda_prefix:
         ilog_path = Path(conda_prefix) / 'ilog'
         if ilog_path.exists():
-            cplex_versions = list(ilog_path.glob('cplex_*'))
-            if cplex_versions:
+            # First check for unversioned cplex directory
+            cplex_dir = ilog_path / 'cplex'
+            if cplex_dir.exists():
                 print(f"   ✓ Found CPLEX at: {ilog_path}")
-                for v in cplex_versions:
-                    print(f"     - {v.name}")
+                print(f"     - cplex")
             else:
-                print(f"   ✗ ilog directory exists but no CPLEX version found")
+                # Fall back to checking versioned directories
+                cplex_versions = list(ilog_path.glob('cplex_*'))
+                if cplex_versions:
+                    print(f"   ✓ Found CPLEX at: {ilog_path}")
+                    for v in cplex_versions:
+                        print(f"     - {v.name}")
+                else:
+                    print(f"   ✗ ilog directory exists but no CPLEX installation found")
         else:
             print(f"   ✗ No ilog directory at: {ilog_path}")
             print(f"      Install CPLEX binaries with:")

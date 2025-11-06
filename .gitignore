@@ -1,15 +1,51 @@
+# R Project Files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
-.DS_Store
 CarveWe.Rproj
+
+# macOS
+.DS_Store
+
+# Local Data and Figures
 Data
 Deprecated_Files
 Dissertation_Figs
 Misc_Files
 Figures
-Misc_Files
 Model_Validation/media_err
 Model_Validation/media_out
 Model_Validation/Runs
+
+# Shiny Dashboard
+rsconnect/
+carvewe-dashboard/rsconnect/
+carvewe-dashboard/.Rproj.user/
+*.Rproj
+
+# Python (if applicable)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Conda
+*.tar.bz2
+.conda/

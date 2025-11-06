@@ -8,7 +8,7 @@ CarveWe requires IBM CPLEX with an academic license for optimal performance.
 ```bash
 conda create -n carvewe python=3.12
 conda activate carvewe
-conda install -c ryanreyn carvewe
+conda install -c conda-forge -c bioconda -c ryanreyn carvewe
 ```
 
 ### 2. Install CPLEX Binaries and CPLEX Python API

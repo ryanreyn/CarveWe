@@ -12,7 +12,7 @@ First create a new conda environment and install the carvewe package into this e
 ```bash
 conda create -n carvewe python=3.12
 conda activate carvewe
-conda install -c ryanreyn carvewe
+conda install -c conda-forge -c bioconda -c ryanreyn carvewe
 ```
 
 Then install the community edition CPLEX that is publicly available to access the Python API

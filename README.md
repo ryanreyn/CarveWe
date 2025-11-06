@@ -22,7 +22,7 @@ pip install cplex
 
 Then install your CPLEX binaries while the environment is active (to ensure the binaries correctly identify `$CONDA_PREFIX`):
 ```bash
-./cplex_studio_installer.bin -i console \
+./cplex_studio2212.linux_x86_64.bin -i console \
   -DUSER_INSTALL_DIR=$CONDA_PREFIX/ilog \
   -DLICENSE_ACCEPTED=TRUE
 ```
@@ -40,6 +40,21 @@ For users interested in a streamlined method to align their genomes of interest 
 
 ## Metabolic sensitivity prediction
 One novel key element of the CarveWe pipeline that we introduced was the notion of performing media predictions on the annotated models with *in silico* conditions meant to mimic a nutrient replete state (unbounded import flux) as well as nutrient deplete states. The **CarveWe** tools also offers a more extensive workflow that enables the user to annotate new CarveMe model ensembles, predict metabolic fluxes and model growth under nutrient replete conditions, and then predict metabolic sensitivities by calculating model growth under a user-prescribed level of nutrient limitation. This remains under development and will be released in full soon with active development to follow.
+
+## Interactive Dashboard
+
+We now provide an interactive Shiny dashboard for exploring metabolic sensitivity data and 
+performing SOM-based clustering analysis. The dashboard provides:
+
+- Data upload or demo dataset exploration
+- Self-Organizing Map (SOM) training and visualization
+- K-means clustering with quality evaluation
+- Metabolite sensitivity profiling across clusters
+- Interactive visualizations and downloadable results
+
+**[Launch Dashboard →](carvewe-dashboard/)**
+
+See the [dashboard README](carvewe-dashboard/README.md) for installation and usage instructions.
 
 ## Publication reproduction
 Reproducible science is essential, so this repository also houses the relevant scripts and publicly available data to reproduce the complete analytical findings from our analysis marine microbial metabolism at scale using GEMs constructed with CarveMe, corresponding to this [publication](https://www.biorxiv.org/content/10.1101/2024.05.29.596556v1.abstract). The *reproduce_publication* directory in this repository contains the necessary codes, principally an R markdown file that is designed to ingest the data housed in the 

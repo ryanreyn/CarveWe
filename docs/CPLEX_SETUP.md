@@ -12,12 +12,12 @@ conda install -c ryanreyn carvewe
 ```
 
 ### 2. Install CPLEX Binaries and CPLEX Python API
-Download CPLEX from IBM Academic Initiative:
+Download CPLEX version 22.1.2 from the IBM Academic Initiative:
 https://www.ibm.com/academic/technology/data-science
 
 Then install to your conda environment:
 ```bash
-./cplex_studio_installer.bin -i console \
+./cplex_studio2212.linux_x86_64.bin -i console \
   -DUSER_INSTALL_DIR=$CONDA_PREFIX/ilog \
   -DLICENSE_ACCEPTED=TRUE
 ```

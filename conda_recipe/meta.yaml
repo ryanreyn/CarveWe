@@ -1,0 +1,61 @@
+{% set name = "carvewe" %}
+{% set version = environ.get('CONDA_PKG_VERSION', '0.5.0') %}
+{% set buildstr = environ.get('PKG_BUILD_STRING', 'local') %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  git_url: https://github.com/ryanreyn/CarveWe.git
+  git_rev: {{ environ.get('CARVEWE_GIT_REV', 'HEAD') }}
+
+build:
+  number: 0
+  string: {{ environ.get('PKG_BUILD_STRING', 'local') }}
+  skip: True  # [target_platform == "osx-arm64"]
+
+requirements:
+  host:
+    - python >=3.10,<3.13
+    - bash
+    - pip
+    - coreutils
+  run:
+    - bash
+    - coreutils
+    - numpy==2.2.3
+    - carveme==1.6.4
+    - python >=3.10,<3.13
+    - pandas
+    - cobra==0.29.1
+    - reframed==1.6.0
+    - diamond
+    - lxml
+    - seaborn
+    - matplotlib
+    - python-libsbml
+
+test:
+  source_files:
+    - conda_recipe/run_test.sh
+  commands:
+    - bash conda_recipe/run_test.sh
+
+about:
+  home: https://github.com/ryanreyn/CarveWe
+  license: GPL-3.0-only
+  license_file: LICENSE
+  summary: "Modular CLI for a custom metabolic model and media prediction workflow"
+  description: |
+    CarveWe provides a modular, well-documented Bash CLI that orchestrates
+    genome-driven metabolic model building, annotation, growth simulation,
+    and media prediction.
+    
+    Note: Full CPLEX functionality requires IBM CPLEX binaries with an academic
+    license. See CPLEX_SETUP.md for installation instructions.
+  dev_url: https://github.com/ryanreyn/CarveWe
+
+extra:
+  recipe-maintainers:
+    - ryanreyn

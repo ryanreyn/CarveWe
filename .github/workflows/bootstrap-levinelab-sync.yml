@@ -1,0 +1,67 @@
+name: Mirror to LevineLab
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to sync (empty = latest vX.Y.Z tag)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  LAB_REPO: LevineLab/CarveWe
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout with all tags
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+            [[ -z "$TAG" ]] && echo "No SemVer tags found" && exit 1
+          fi
+          [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo "Invalid SemVer: $TAG" && exit 1
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Using tag: $TAG"
+
+      - name: Configure git with PAT
+        run: |
+          git config user.name "Ryan Reynolds"
+          git config user.email "levinelab-sync@users.noreply.github.com"
+          git config --global url."https://x-access-token:${{ secrets.LAB_PUSH_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+      - name: Push branch and create PR
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          GH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
+        run: |
+          BRANCH="sync-${TAG}"
+          
+          # Push the branch
+          git checkout -B "$BRANCH" "$TAG"
+          git remote add lab https://github.com/${{ env.LAB_REPO }}.git
+          git push lab "$BRANCH" --force
+          
+          # Create PR if it doesn't exist
+          gh pr list --repo ${{ env.LAB_REPO }} --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q . && {
+            echo "PR already exists for $BRANCH"
+            exit 0
+          }
+          
+          gh pr create --repo ${{ env.LAB_REPO }} \
+            --head "$BRANCH" \
+            --base main \
+            --title "Sync upstream $TAG" \
+            --body "Mirror of upstream tag $TAG from ryanreyn/CarveWe"

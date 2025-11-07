@@ -32,8 +32,25 @@ def extract_ensemble_map(root):
     return ensemble_map
 
 def parse_reactions_with_ensemble_states(sbml_path):
-    tree = etree.parse(sbml_path)
-    root = tree.getroot()
+    try:
+        tree = etree.parse(sbml_path)
+    except etree.XMLSyntaxError as e:
+        # Attempt to clean null bytes and retry
+        print(f"[WARN] XML parsing error in {sbml_path}: {e}")
+        print(f"[INFO] Attempting to clean null bytes and retry...")
+        try:
+            with open(sbml_path, 'rb') as f:
+                content = f.read()
+            content_clean = content.replace(b'\x00', b'')
+
+            # Parse from cleaned bytes
+            tree = etree.fromstring(content_clean)
+            root = tree
+        except Exception as clean_error:
+            print(f"[ERROR] Failed to parse even after cleaning: {clean_error}")
+            raise
+    else:
+        root = tree.getroot()
 
     ensemble_map = extract_ensemble_map(root)
 
@@ -85,13 +102,19 @@ def main():
         out_csv = os.path.join(output_dir, f"{prefix}_rxn-info.csv")
 
         sbml_path = os.path.join(xml_dir, fname)
-        rxn_data = parse_reactions_with_ensemble_states(sbml_path)
 
-        with open(out_csv, "w") as f:
-            for rxn_id, ensemble_state in rxn_data:
-                f.write(f"{rxn_id},{ensemble_state}\n")
+        try:
+            rxn_data = parse_reactions_with_ensemble_states(sbml_path)
 
-        print(f"[INFO] Wrote {len(rxn_data)} lines to {out_csv}")
+            with open(out_csv, "w") as f:
+                for rxn_id, ensemble_state in rxn_data:
+                    f.write(f"{rxn_id},{ensemble_state}\n")
+
+            print(f"[INFO] Wrote {len(rxn_data)} lines to {out_csv}")
+        except Exception as e:
+            print(f"[ERROR] Failed to process {fname}: {e}")
+            print(f"[WARN] Skipping {fname} and continuing with next file...")
+            continue
 
     os.remove(filelist_path)
 

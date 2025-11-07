@@ -81,12 +81,10 @@ fna_type='false'
 faa_type='false'
 ensemble_size=2
 run_blast='false'
-data_dir="${CARVEWE_DATA_DIR}"
-scripts_dir="${CARVEWE_SCRIPTS_DIR}"
 skip_carving='false'
 
 # Ensure scripts are found in PATH
-export PATH="${scripts_dir}:${PATH}"
+export PATH="${CARVEWE_SCRIPTS_DIR}:${PATH}"
 
 #Establish the options for this program
 while getopts p:dano:t:e:bs args
@@ -107,7 +105,6 @@ done
 
 #Normalizing directories to remove any lagging "/" symbols
 out_dir=`echo "${out_dir%/}"`
-data_dir=`echo "${data_dir%/}"`
 
 #Convert out_dir to absolute path if it's relative
 if [[ "$out_dir" != /* ]]; then
@@ -125,6 +122,11 @@ if [[ -n "$fasta_file" && "$fasta_file" != /* ]]; then
     fi
 fi
 
+#Create the output directory if it doesn't exist
+if [ ! -d "$out_dir" ]; then
+    mkdir -p "$out_dir"
+fi
+
 #Initialize the log file for error output
 touch $out_dir"/log.txt"
 
@@ -135,14 +137,14 @@ touch $out_dir"/log.txt"
 if [ "$run_blast" == "true" ]
 then
     printf "${YELLOW}You have elected to run the BLAST, checking if the database files exist.${NC}\n\n"
-    if [ "$fna_type" == "true" ] && [ ! -f  "$data_dir/carvewe-hq-genomes.nhr" ]
-    then 
-        printf "${RED}BLAST database files not found, so we will generate them.${NC}\n\n"
-        "${scripts_dir}/construct-db.sh" -n -o $out_dir -p $num_threads
-    elif [ "$faa_type" == "true" ] && [ ! -f "$data_dir/carvewe-protein-seqs.pdb" ]
+    if [ "$fna_type" == "true" ] && [ ! -f  "${CARVEWE_DATA_DIR}/carvewe-hq-genomes.nhr" ]
     then
         printf "${RED}BLAST database files not found, so we will generate them.${NC}\n\n"
-        "${scripts_dir}/construct-db.sh" -a -o $out_dir -p $num_threads
+        "${CARVEWE_SCRIPTS_DIR}/construct-db.sh" -n -o $out_dir -p $num_threads
+    elif [ "$faa_type" == "true" ] && [ ! -f "${CARVEWE_DATA_DIR}/carvewe-protein-seqs.pdb" ]
+    then
+        printf "${RED}BLAST database files not found, so we will generate them.${NC}\n\n"
+        "${CARVEWE_SCRIPTS_DIR}/construct-db.sh" -a -o $out_dir -p $num_threads
     fi
 else
     printf "${YELLOW}You have already generated the BLAST database files!${NC}\n\n"
@@ -167,14 +169,14 @@ then
 
     #Call the BLAST program, conditioning on whether the -n or -a flag was provided
     printf " ${YELLOW}Running the BLAST subprocess to align input genomes using best hit.${NC}\n\n"
-    
+
     if [ "$fna_type" == true ]
     then
-        "${scripts_dir}/genome-aligner.sh" -p ${fasta_file} -d ${fasta_dir} -n \
+        "${CARVEWE_SCRIPTS_DIR}/genome-aligner.sh" -p ${fasta_file} -d ${fasta_dir} -n \
         -o ${out_dir} -t ${num_threads}
     elif [ "$faa_type" == true ]
     then
-        "${scripts_dir}/genome-aligner.sh" -p ${fasta_file} -d ${fasta_dir} -a \
+        "${CARVEWE_SCRIPTS_DIR}/genome-aligner.sh" -p ${fasta_file} -d ${fasta_dir} -a \
         -o ${out_dir} -t ${num_threads}
     fi
 else
@@ -192,20 +194,20 @@ else
 
     if [ "$fna_type" == 'true' ]
     then
-        "${scripts_dir}/run-carveme.sh" -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+        "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
         -p ${num_threads}
     else
-        "${scripts_dir}/run-carveme.sh" -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+        "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
         -p ${num_threads}
     fi
 
     #Building a subprocess here to extract model quality and generate some analytical plots
-    #for users to examine 
+    #for users to examine
     xml_dir=$out_dir"/xml_files"
     if [[ "$ensemble_size" -ge 10 ]]
     then
         printf "${YELLOW}Passing model files to an ensemble quality prediction subprocess${NC}\n\n"
-        python "${scripts_dir}/extract-model-quality.py" -d $xml_dir -w $out_dir
+        python "${CARVEWE_SCRIPTS_DIR}/extract-model-quality.py" -d $xml_dir -w $out_dir
     else
         printf "${RED}The specified ensemble size is too small to reliably analyze within ensemble model differences${NC}\n\n"
     fi
@@ -230,25 +232,25 @@ ls $out_dir/xml_files/*.xml | sed "s/\.xml//g; s/.*\///g" > $genome_list
 while read genome
 do
     printf "Running $genome through media prediction\n\n"
-    python "${scripts_dir}/generate_ensemble_media_microbiomics.py" --ensemble-size $ensemble_size \
+    python "${CARVEWE_SCRIPTS_DIR}/generate_ensemble_media_microbiomics.py" --ensemble-size $ensemble_size \
     --work-dir $out_dir --media-dir $media_dir $genome
 
     printf "Completed running $genome through media prediction, outputting the results to $media_dir\n\n"
 done < $genome_list
 
-#Now we will pass the raw COBRApy predictions to a script to filter, merge, and 
+#Now we will pass the raw COBRApy predictions to a script to filter, merge, and
 #convert the output in order to run metabolite sensitivity tests as well
 printf "${YELLOW}Converting raw COBRApy output to correct input for sensitivity prediction:${NC}\n\n"
 
-python "${scripts_dir}/convert-media-output.py" --media-dir $media_dir --work-dir $out_dir
+python "${CARVEWE_SCRIPTS_DIR}/convert-media-output.py" --media-dir $media_dir --work-dir $out_dir
 
 
 #Now we will pass our reformatted and combined media data to predict metabolite
 #sensitivities for all input genomes
 printf "${YELLOW}Extracting sensitivity values for our defined metabolite classes:${NC}\n\n"
 
-python "${scripts_dir}/get_met_depends.py" --media-dir $media_dir --work-dir $out_dir \
-    --ensemble-size $ensemble_size --data-dir $data_dir
+python "${CARVEWE_SCRIPTS_DIR}/get_met_depends.py" --media-dir $media_dir --work-dir $out_dir \
+    --ensemble-size $ensemble_size --data-dir "${CARVEWE_DATA_DIR}"
 
 #Remove temporary file listing out the genomes
 rm $genome_list

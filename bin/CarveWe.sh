@@ -186,9 +186,24 @@ fi
 ##### This section will run segments of the CarveWe pipeline for users interested in
 #processing their own genomes through CarveMe, COBRApy, and metabolic sensitivity####
 #Run the model carving and reaction info extraction subprocess
+xml_dir=$out_dir"/xml_files"
+
 if [ "$skip_carving" == 'true' ]
 then
+    #Check that the user has xml files otherwise break
+    if [ ! -d "$xml_dir" ] || [ -z "$(ls -A $xml_dir/*.xml 2>/dev/null)" ]
+    then
+        printf "${RED}You have elected to skip the model prediction step but no xml files detected!${NC}\n\n" >&2 && exit
+    fi
+
     printf "${YELLOW}Skipping the model prediction step!${NC}\n\n"
+    #We want to make sure that if we are skipping we run the reaction state extraction step
+    #if rxn-info files do not already exist
+    if [ ! -d "$out_dir/ensemble_rxn-info_files" ]
+    then
+        python "${CARVEWE_SCRIPTS_DIR}/extract_reaction-info.py" -x $xml_dir -o $out_dir
+    fi
+
 else
     printf "${YELLOW}Running the provided genomes through CarveMe to annotate metabolic models:${NC}\n\n"
 
@@ -203,7 +218,6 @@ else
 
     #Building a subprocess here to extract model quality and generate some analytical plots
     #for users to examine
-    xml_dir=$out_dir"/xml_files"
     if [[ "$ensemble_size" -ge 10 ]]
     then
         printf "${YELLOW}Passing model files to an ensemble quality prediction subprocess${NC}\n\n"

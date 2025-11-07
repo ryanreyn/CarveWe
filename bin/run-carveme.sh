@@ -131,7 +131,7 @@ printf "\n"
 #Now we will process the output .xml files with our custom JSON parsing file to
 #create our ensemble reaction info files
 #extract_reaction-info.sh -x $xml_dir -o $out_dir
-python extract_reaction-info.py -x $xml_dir -o $out_dir
+python "${scripts_dir}/extract_reaction-info.py" -x $xml_dir -o $out_dir
 
 #Remove any temporary files made in the course of the subprocess
 rm $tmp_filelist

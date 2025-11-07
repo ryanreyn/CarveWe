@@ -67,6 +67,12 @@ then
 fi
 
 #Setting up and parsing arguments
+# Check for CarveWe environment
+if [ -z "${CARVEWE_INSTALL_DIR:-}" ]; then
+    printf "\n ${RED}CarveWe environment variables not set. Is your conda environment activated?${NC}\n\n"
+    exit 1
+fi
+
 #Setting some default parameters
 out_dir='CarveWe_output'
 fasta_dir='false'
@@ -75,8 +81,12 @@ fna_type='false'
 faa_type='false'
 ensemble_size=2
 run_blast='false'
-data_dir='../ref_data'
+data_dir="${CARVEWE_DATA_DIR}"
+scripts_dir="${CARVEWE_SCRIPTS_DIR}"
 skip_carving='false'
+
+# Ensure scripts are found in PATH
+export PATH="${scripts_dir}:${PATH}"
 
 #Establish the options for this program
 while getopts p:dano:t:e:bs args
@@ -113,11 +123,11 @@ then
     if [ "$fna_type" == "true" ] && [ ! -f  "$data_dir/carvewe-hq-genomes.nhr" ]
     then 
         printf "${RED}BLAST database files not found, so we will generate them.${NC}\n\n"
-        construct-db.sh -n -o $out_dir -p $num_threads
+        "${scripts_dir}/construct-db.sh" -n -o $out_dir -p $num_threads
     elif [ "$faa_type" == "true" ] && [ ! -f "$data_dir/carvewe-protein-seqs.pdb" ]
     then
         printf "${RED}BLAST database files not found, so we will generate them.${NC}\n\n"
-        construct-db.sh -a -o $out_dir -p $num_threads
+        "${scripts_dir}/construct-db.sh" -a -o $out_dir -p $num_threads
     fi
 else
     printf "${YELLOW}You have already generated the BLAST database files!${NC}\n\n"
@@ -145,11 +155,11 @@ then
     
     if [ "$fna_type" == true ]
     then
-        genome-aligner.sh -p ${fasta_file} -d ${fasta_dir} -n \
+        "${scripts_dir}/genome-aligner.sh" -p ${fasta_file} -d ${fasta_dir} -n \
         -o ${out_dir} -t ${num_threads}
     elif [ "$faa_type" == true ]
     then
-        genome-aligner.sh -p ${fasta_file} -d ${fasta_dir} -a \
+        "${scripts_dir}/genome-aligner.sh" -p ${fasta_file} -d ${fasta_dir} -a \
         -o ${out_dir} -t ${num_threads}
     fi
 else
@@ -167,10 +177,10 @@ else
 
     if [ "$fna_type" == 'true' ]
     then
-        run-carveme.sh -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+        "${scripts_dir}/run-carveme.sh" -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
         -p ${num_threads}
     else
-        run-carveme.sh -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+        "${scripts_dir}/run-carveme.sh" -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
         -p ${num_threads}
     fi
 
@@ -180,7 +190,7 @@ else
     if [[ "$ensemble_size" -ge 10 ]]
     then
         printf "${YELLOW}Passing model files to an ensemble quality prediction subprocess${NC}\n\n"
-        python extract-model-quality.py -d $xml_dir -w $out_dir
+        python "${scripts_dir}/extract-model-quality.py" -d $xml_dir -w $out_dir
     else
         printf "${RED}The specified ensemble size is too small to reliably analyze within ensemble model differences${NC}\n\n"
     fi
@@ -205,7 +215,7 @@ ls $out_dir/xml_files/*.xml | sed "s/\.xml//g; s/.*\///g" > $genome_list
 while read genome
 do
     printf "Running $genome through media prediction\n\n"
-    python generate_ensemble_media_microbiomics.py --ensemble-size $ensemble_size \
+    python "${scripts_dir}/generate_ensemble_media_microbiomics.py" --ensemble-size $ensemble_size \
     --work-dir $out_dir --media-dir $media_dir $genome
 
     printf "Completed running $genome through media prediction, outputting the results to $media_dir\n\n"
@@ -215,14 +225,14 @@ done < $genome_list
 #convert the output in order to run metabolite sensitivity tests as well
 printf "${YELLOW}Converting raw COBRApy output to correct input for sensitivity prediction:${NC}\n\n"
 
-python convert-media-output.py --media-dir $media_dir --work-dir $out_dir
+python "${scripts_dir}/convert-media-output.py" --media-dir $media_dir --work-dir $out_dir
 
 
 #Now we will pass our reformatted and combined media data to predict metabolite
 #sensitivities for all input genomes
 printf "${YELLOW}Extracting sensitivity values for our defined metabolite classes:${NC}\n\n"
 
-python get_met_depends.py --media-dir $media_dir --work-dir $out_dir \
+python "${scripts_dir}/get_met_depends.py" --media-dir $media_dir --work-dir $out_dir \
     --ensemble-size $ensemble_size --data-dir $data_dir
 
 #Remove temporary file listing out the genomes

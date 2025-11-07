@@ -109,6 +109,21 @@ done
 out_dir=`echo "${out_dir%/}"`
 data_dir=`echo "${data_dir%/}"`
 
+#Convert out_dir to absolute path if it's relative
+if [[ "$out_dir" != /* ]]; then
+    out_dir="$(cd "$(dirname "$out_dir")" 2>/dev/null && pwd)/$(basename "$out_dir")" || out_dir="$(pwd)/$out_dir"
+fi
+
+#Convert fasta_file to absolute path if it's relative
+if [[ -n "$fasta_file" && "$fasta_file" != /* ]]; then
+    if [[ -e "$fasta_file" ]]; then
+        # If it's an existing file or directory, get its real path
+        fasta_file="$(cd "$(dirname "$fasta_file")" 2>/dev/null && pwd)/$(basename "$fasta_file")"
+    else
+        # If it doesn't exist yet, use current directory
+        fasta_file="$(pwd)/$fasta_file"
+    fi
+fi
 
 #Initialize the log file for error output
 touch $out_dir"/log.txt"

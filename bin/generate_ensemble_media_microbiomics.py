@@ -298,5 +298,5 @@ for j in range(num_models): #column indexing variable
 #add metabolite names
 all_media = add_met_names(model, media_recipes)
 
-all_media.to_csv("%s/%s/%s_ensemble_media.csv" %(work_dir, media_dir, genome))
-headers.to_csv("%s/%s/%s_ensemble_header.csv" %(work_dir, media_dir, genome))
+all_media.to_csv("%s/%s_ensemble_media.csv" %(media_dir, genome))
+headers.to_csv("%s/%s_ensemble_header.csv" %(media_dir, genome))

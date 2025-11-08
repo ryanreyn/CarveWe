@@ -24,13 +24,16 @@ help_menu()
     printf "    1) Input the path to a directory of FASTA formatted files or to an individual file\n"
     printf "        - [-d ] default: false\n"
     printf "            Define whether the input path is a file or directory\n"
-    printf "        - [-p <file>] file path to an individual FASTA file or directory of files\n"
+    printf "        - [-f <file>] file path to an individual FASTA file or directory of files\n"
     printf "    2) Define whether input genomes are in nucleotide (.fna) or protein (.faa) format\n"
     printf "        This choice is mutually exclusive, both are by default set to false.\n"
     printf "        - [-n ] Specify that the FASTA file(s) are in nucleotide format\n"
     printf "        - [-a ] Specify that the FASTA file(s) are in amino acid format\n"
 
     printf "\n ---------------------------- ${LIGHTYELLOW}OPTIONAL INPUTS${NC} ----------------------------\n\n"
+    printf "    ${LIGHTYELLOW}Parallel job array specification:${NC}\n\n"
+    printf "        - [-p ] default: false\n"
+    printf "            Specify whether you are parallelizing CarveWe by batching it into multiple jobs\n\n"
     printf "    ${LIGHTYELLOW}Output directory specification:${NC}\n\n"
     printf "        - [-o <str>] default: CarveWe_output\n"
     printf "            Specify the desired output directory\n\n"
@@ -82,19 +85,21 @@ faa_type='false'
 ensemble_size=2
 run_blast='false'
 skip_carving='false'
+is_parallel='false'
 
 # Ensure scripts are found in PATH
 export PATH="${CARVEWE_SCRIPTS_DIR}:${PATH}"
 
 #Establish the options for this program
-while getopts p:dano:t:e:bs args
+while getopts f:dano:pt:e:bs args
 do
     case ${args} in
-        p) fasta_file=${OPTARG};;
+        f) fasta_file=${OPTARG};;
         d) fasta_dir='true';;
         a) faa_type='true';;
         n) fna_type='true';;
         o) out_dir=${OPTARG};;
+        p) is_parallel='true';;
         t) num_threads=${OPTARG};;
         e) ensemble_size=${OPTARG};;
         b) run_blast='true';;
@@ -229,28 +234,44 @@ fi
 
 #Now we will pass the xml and reaction info files to the COBRApy subprocess
 media_dir=$out_dir"/media_files"
-if [ -d "$media_dir" ]
+if [ "$is_parallel" == "true" ]
 then
-    rm -r $media_dir
-    mkdir $media_dir
+    if [ ! -d "$media_dir" ]
+    then
+        mkdir -p $media_dir
+    fi
 else
-    mkdir $media_dir
+    if [ -d "$media_dir" ]
+    then
+        rm -r $media_dir
+        mkdir $media_dir
+    else
+        mkdir $media_dir
+    fi
 fi
 
 #Create a temporary file with all of the genome files (dropping the fasta extension)
 printf "${YELLOW}\nRunning the SBML CarveMe model files through COBRApy for media prediction:${NC}\n\n"
 
-genome_list=$out_dir"/tmp-genomes-list.txt"
-ls $out_dir/xml_files/*.xml | sed "s/\.xml//g; s/.*\///g" > $genome_list
+if [ "$fasta_dir" == "true" ]
+then
+    genome_list=$out_dir"/tmp-genomes-list.txt"
+    ls $out_dir/xml_files/*.xml | sed "s/\.xml//g; s/.*\///g" > $genome_list
 
-while read genome
-do
+    while read genome
+    do
+        printf "Running $genome through media prediction\n\n"
+        python "${CARVEWE_SCRIPTS_DIR}/generate_ensemble_media_microbiomics.py" --ensemble-size $ensemble_size \
+        --work-dir $out_dir --media-dir $media_dir $genome
+
+        printf "Completed running $genome through media prediction, outputting the results to $media_dir\n\n"
+    done < $genome_list
+else
+    genome=`echo $fasta_file | sed "s/.*\///g; s/\.f[an]a//g"`
     printf "Running $genome through media prediction\n\n"
     python "${CARVEWE_SCRIPTS_DIR}/generate_ensemble_media_microbiomics.py" --ensemble-size $ensemble_size \
     --work-dir $out_dir --media-dir $media_dir $genome
-
-    printf "Completed running $genome through media prediction, outputting the results to $media_dir\n\n"
-done < $genome_list
+fi
 
 #Now we will pass the raw COBRApy predictions to a script to filter, merge, and
 #convert the output in order to run metabolite sensitivity tests as well
@@ -267,4 +288,7 @@ python "${CARVEWE_SCRIPTS_DIR}/get_met_depends.py" --media-dir $media_dir --work
     --ensemble-size $ensemble_size --data-dir "${CARVEWE_DATA_DIR}"
 
 #Remove temporary file listing out the genomes
-rm $genome_list
+if [ "$fasta_dir" == "true" ]
+then
+    rm $genome_list
+fi

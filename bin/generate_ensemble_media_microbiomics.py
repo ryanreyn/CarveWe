@@ -5,11 +5,12 @@
 import numpy as np
 import pandas as pd
 import optparse
+import random
 
 from cobra.io import read_sbml_model, write_sbml_model
 from cobra.flux_analysis import pfba
 from cobra.medium import minimal_medium
-import os 
+import os
 import sys
 import csv
 from datetime import datetime
@@ -204,24 +205,47 @@ print(f"[INFO] Removed {len(model.reactions)-len(filtered_reactions)} reactions 
 #objects
 rxn_dict = {rxn.id: rxn for rxn in model.reactions}
 
+# Determine which models to run sensitivity analysis on
+# Always test first model, then random sample of n/10 (min 5 if n>=5)
+models_to_test = {0}  # Always test first model
+if num_models >= 5:
+    sample_size = max(5, num_models // 10)
+    # Sample from models 1 to num_models-1 (excluding 0 since we always test it)
+    sample_size = min(sample_size, num_models - 1)  # Don't sample more than available
+    models_to_test.update(random.sample(range(1, num_models), sample_size))
+else:
+    # For small ensembles, test all
+    models_to_test.update(range(num_models))
+
+print(f"[INFO] Running sensitivity analysis on {len(models_to_test)} of {num_models} models: {sorted(models_to_test)}")
+
+# Cache problematic reactions from sensitivity testing
+problematic_cache = {}
+
 for j in range(num_models): #column indexing variable
   i = 0 #reaction indexing variable
 
   if verbose:
     print(f"[INFO] Processing model {j+1}/{num_models}")
-    
+
   # Define the full list of reactions with state=0 in your ensemble file
   zeroed_reactions = [rxn for i, rxn in enumerate(filtered_reactions)
-                      if int(rxn_states.iloc[i, j]) == 0]  # test column 0 for simplicity
+                      if int(rxn_states.iloc[i, j]) == 0]
 
-  # Run the sensitivity test
-  problematic = test_growth_sensitivity_to_reaction(
-    model, zeroed_reactions, verbose=True
+  # Run the sensitivity test only on selected models
+  if j in models_to_test:
+    print(f"\n[SENSITIVITY] Testing model {j+1}/{num_models} for essential reactions...")
+    problematic = test_growth_sensitivity_to_reaction(
+      model, zeroed_reactions, verbose=verbose
     )
-
-  print("\nReactions that block growth when knocked out:")
-  for r in problematic:
-      print(f"  - {r}")
+    problematic_cache[j] = problematic
+    print(f"[SENSITIVITY] Found {len(problematic)} reactions that block growth when knocked out")
+    if verbose:
+      for rxn_id in problematic:
+        print(f"  - {rxn_id}")
+  else:
+    # Use cached results from first model as conservative estimate
+    problematic = problematic_cache.get(0, [])
 
   with model as temp_model:
 

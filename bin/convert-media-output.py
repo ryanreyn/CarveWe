@@ -15,35 +15,52 @@ if __name__ == '__main__':
                       help="provide the working directory that houses xml and reaction info files")
     parser.add_option('-o', '--media-dir', dest='media_dir',
                       help="provide the name of the directory you want the media output to be directed to")
+    parser.add_option('-g', '--genome', dest='genome', default=None,
+                      help="OPTIONAL: Process only files for this specific genome (for parallel mode). "
+                           "If not provided, processes all genomes and creates consolidated output.")
     opts, args = parser.parse_args()
     #Convert input opts and args to python variables
     verbose=opts.verbose
     work_dir=opts.work_dir
     media_dir=opts.media_dir
+    genome_filter=opts.genome
 
 #step 1
 #generate a list with all the genome names and one with all the ensemble sizes
 
-#list of directory with all the rxn info files
-#rxn info files have ensemble states and rxn names
-directory = os.fsencode('%s' %(media_dir))
-os.listdir(directory)
+# PERFORMANCE FIX: Single-genome mode vs. batch mode
+# If --genome is specified, only process that genome (parallel mode - no directory scanning overhead)
+# If --genome is NOT specified, process all genomes (batch mode - original behavior)
+if genome_filter:
+    # Single-genome mode: No directory scanning, just use the provided genome name
+    genomes = [genome_filter]
+    if verbose:
+        print(f"[SINGLE-GENOME MODE] Processing only genome: {genome_filter}")
+else:
+    # Batch mode: Scan directory for all genomes (original behavior)
+    #list of directory with all the rxn info files
+    #rxn info files have ensemble states and rxn names
+    directory = os.fsencode('%s' %(media_dir))
+    os.listdir(directory)
 
-#read in an individual file
-#loop through all the files in the folder
-genomes = []
-for file in os.listdir(directory):
-  filename = os.fsdecode(file)
+    #read in an individual file
+    #loop through all the files in the folder
+    genomes = []
+    for file in os.listdir(directory):
+      filename = os.fsdecode(file)
 
-  #parse name of model
-  name = filename.replace('.csv', '') #filename without .csv
-  split = name.split('_')
-  name = '_'.join(split[:-1])
-  split = split[:-2] #gets genome name without 'ensemble'
-  strname = '_'.join(split) #puts ensemble name into underscore separated format
+      #parse name of model
+      name = filename.replace('.csv', '') #filename without .csv
+      split = name.split('_')
+      name = '_'.join(split[:-1])
+      split = split[:-2] #gets genome name without 'ensemble'
+      strname = '_'.join(split) #puts ensemble name into underscore separated format
 
-  if strname not in genomes:
-    genomes.append(strname)
+      if strname not in genomes:
+        genomes.append(strname)
+
+    if verbose:
+        print(f"[BATCH MODE] Processing {len(genomes)} genomes from directory scan")
 
 
 len(genomes)
@@ -124,23 +141,36 @@ for genome in genomes:
 fluxes_df_filled = fluxes_df.fillna(0)
 fluxes_df_filled.info()
 
+# PERFORMANCE FIX: Genome-specific output files in single-genome mode to prevent overwrites
+# Determine output file suffix based on mode
+if genome_filter:
+    # Single-genome mode: Add genome name to output files (prevents parallel job overwrites)
+    file_suffix = f"_{genome_filter}"
+    if verbose:
+        print(f"[SINGLE-GENOME MODE] Writing genome-specific output files with suffix: {file_suffix}")
+else:
+    # Batch mode: Use standard filenames (original behavior)
+    file_suffix = ""
+    if verbose:
+        print(f"[BATCH MODE] Writing consolidated output files")
+
 #store all max flux dataframes
-fluxes_df_filled.to_csv('%s/all_max_flux_diamond.csv' %(work_dir))
-headers.to_csv('%s/all_max_flux_headers_diamond.csv' %(work_dir))
+fluxes_df_filled.to_csv('%s/all_max_flux_diamond%s.csv' %(work_dir, file_suffix))
+headers.to_csv('%s/all_max_flux_headers_diamond%s.csv' %(work_dir, file_suffix))
 
 names = pd.DataFrame.from_dict(met_names, orient='index')
-names.to_csv('%s/all_max_flux_met_names.csv' %(work_dir))
+names.to_csv('%s/all_max_flux_met_names%s.csv' %(work_dir, file_suffix))
 
 # pull in values and headers
-max_flux = pd.read_csv('%s/all_max_flux_diamond.csv' %(work_dir), index_col = 0)
-headers = pd.read_csv('%s/all_max_flux_headers_diamond.csv' %(work_dir), index_col = 0)
+max_flux = pd.read_csv('%s/all_max_flux_diamond%s.csv' %(work_dir, file_suffix), index_col = 0)
+headers = pd.read_csv('%s/all_max_flux_headers_diamond%s.csv' %(work_dir, file_suffix), index_col = 0)
 
 #replace 0s with NaNs in the metabolite dataframe
 max_flux.replace(0, np.nan, inplace=True)
 
 #replace column names with the model names
 columns = headers.columns
-headers = headers.set_axis(headers.loc['model_name'].to_list(), axis='columns') 
+headers = headers.set_axis(headers.loc['model_name'].to_list(), axis='columns')
 #set column names to model names
 
 #set back the index to the original index
@@ -150,4 +180,4 @@ headers = headers.set_axis(columns, axis ='columns')
 data = pd.concat([headers, max_flux])
 data = data.T
 
-data.to_csv('%s/reformatted_media_data.csv' %(work_dir))
+data.to_csv('%s/reformatted_media_data%s.csv' %(work_dir, file_suffix))

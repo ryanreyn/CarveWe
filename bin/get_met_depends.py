@@ -25,6 +25,9 @@ if __name__ == '__main__':
                       help="provide the name of the directory you want the media output to be directed to")
     parser.add_option('-d', '--data-dir', dest='data_dir',
                       help="provide the name of the directory housing necessary data files")
+    parser.add_option('-g', '--genome', dest='genome', default=None,
+                      help="OPTIONAL: Process only files for this specific genome (for parallel mode). "
+                           "If not provided, processes all genomes and creates consolidated output.")
     opts, args = parser.parse_args()
     #Convert input opts and args to python variables
     verbose=opts.verbose
@@ -32,29 +35,42 @@ if __name__ == '__main__':
     media_dir=opts.media_dir
     num_models=opts.num_models
     data_dir=opts.data_dir
+    genome_filter=opts.genome
 
 
 #step 1
 #generate a list with all the genome names and one with all the ensemble sizes from the filenames in a folder
 
-#list of directory with all the rxn info files
-#rxn info files have ensemble states and rxn names
-directory = os.fsencode('%s/xml_files/' %(work_dir))
-os.listdir(directory)
+# PERFORMANCE FIX: Single-genome mode vs. batch mode
+# If --genome is specified, only process that genome (parallel mode - no directory scanning overhead)
+# If --genome is NOT specified, process all genomes (batch mode - original behavior)
+if genome_filter:
+    # Single-genome mode: No directory scanning, just use the provided genome name
+    genomes = [genome_filter]
+    if verbose:
+        print(f"[SINGLE-GENOME MODE] Processing only genome: {genome_filter}")
+else:
+    # Batch mode: Scan directory for all genomes (original behavior)
+    #list of directory with all the rxn info files
+    #rxn info files have ensemble states and rxn names
+    directory = os.fsencode('%s/xml_files/' %(work_dir))
+    os.listdir(directory)
 
+    #read in an individual file
+    #loop through all the files in the folder
+    genomes = []
+    for file in os.listdir(directory):
+      filename = os.fsdecode(file)
+      if filename.endswith('.xml'):
 
-#read in an individual file
-#loop through all the files in the folder
-genomes = []
-for file in os.listdir(directory):
-  filename = os.fsdecode(file)
-  if filename.endswith('.xml'):
+        #parse name of model
+        name = filename.replace('.xml', '') #filename without .xml
 
-    #parse name of model
-    name = filename.replace('.xml', '') #filename without .xml
+        if name not in genomes:
+          genomes.append(name)
 
-    if name not in genomes:
-      genomes.append(name)
+    if verbose:
+        print(f"[BATCH MODE] Processing {len(genomes)} genomes from directory scan")
 
 
 
@@ -142,10 +158,21 @@ cats = ['Carboxylic Acid', 'Other', 'Ketones/Aldehydes',
        'B Vitamins', 'Carbohydrates/Derivatives',
        'Phospholipids/Fatty Acids/Triglycerides'] #sets the metabolite categories
 
-
+# PERFORMANCE FIX: Read genome-specific input files in single-genome mode
+# Determine input file suffix based on mode (must match convert-media-output.py output)
+if genome_filter:
+    # Single-genome mode: Read genome-specific files created by convert-media-output.py
+    file_suffix = f"_{genome_filter}"
+    if verbose:
+        print(f"[SINGLE-GENOME MODE] Reading genome-specific input files with suffix: {file_suffix}")
+else:
+    # Batch mode: Read consolidated files (original behavior)
+    file_suffix = ""
+    if verbose:
+        print(f"[BATCH MODE] Reading consolidated input files")
 
 #pull in the media data with headers
-data = pd.read_csv('%s/reformatted_media_data.csv' %(work_dir), index_col = 0)
+data = pd.read_csv('%s/reformatted_media_data%s.csv' %(work_dir, file_suffix), index_col = 0)
 #data = data.fillna(0)
 
 #pull in the classified metabolite data
@@ -153,7 +180,7 @@ met_class = pd.read_csv('%s/classified_metabolites.csv' %(data_dir), index_col=0
 
 #load in the metabolite names dictionary
 #pull in the data
-met_names_df = pd.read_csv('%s/all_max_flux_met_names.csv' %(work_dir), index_col = 0)
+met_names_df = pd.read_csv('%s/all_max_flux_met_names%s.csv' %(work_dir, file_suffix), index_col = 0)
 met_names = met_names_df.squeeze()
 
 #loop though the genomes
@@ -235,9 +262,22 @@ for genome in genomes:
 
 print(growth_info)
 
+# PERFORMANCE FIX: Genome-specific output files in single-genome mode to prevent overwrites
+# Output file suffix matches the mode used throughout
+if genome_filter:
+    # Single-genome mode: Add genome name to output files (prevents parallel job overwrites)
+    output_suffix = f"_{genome_filter}"
+    if verbose:
+        print(f"[SINGLE-GENOME MODE] Writing genome-specific output files with suffix: {output_suffix}")
+else:
+    # Batch mode: Use standard filenames (original behavior)
+    output_suffix = ""
+    if verbose:
+        print(f"[BATCH MODE] Writing consolidated output files")
+
 cat_growth_info_df = pd.DataFrame.from_dict(growth_info)
-cat_growth_info_df.to_csv('%s/model_growth_rate_info_by_met_category_all_metabolites.csv' %(work_dir))
+cat_growth_info_df.to_csv('%s/model_growth_rate_info_by_met_category_all_metabolites%s.csv' %(work_dir, output_suffix))
 
 #output sensitivity info to a .csv as well
 sens_growth_info_df = pd.DataFrame.from_dict(sensitivity_info)
-sens_growth_info_df.to_csv('%s/model_sensitivity_by_met_category.csv' %(work_dir))
+sens_growth_info_df.to_csv('%s/model_sensitivity_by_met_category%s.csv' %(work_dir, output_suffix))

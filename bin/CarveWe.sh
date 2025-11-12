@@ -214,11 +214,21 @@ else
 
     if [ "$fna_type" == 'true' ]
     then
-        "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
-        -p ${num_threads}
+        if [ "$is_parallel" == 'true' ]; then
+            "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+            -p ${num_threads} -P
+        else
+            "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -n -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+            -p ${num_threads}
+        fi
     else
-        "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
-        -p ${num_threads}
+        if [ "$is_parallel" == 'true' ]; then
+            "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+            -p ${num_threads} -P
+        else
+            "${CARVEWE_SCRIPTS_DIR}/run-carveme.sh" -a -i ${fasta_file} -o ${out_dir} -e ${ensemble_size} \
+            -p ${num_threads}
+        fi
     fi
 
     #Building a subprocess here to extract model quality and generate some analytical plots
@@ -255,8 +265,20 @@ printf "${YELLOW}\nRunning the SBML CarveMe model files through COBRApy for medi
 
 if [ "$fasta_dir" == "true" ]
 then
-    genome_list=$out_dir"/tmp-genomes-list.txt"
-    ls $out_dir/xml_files/*.xml | sed "s/\.xml//g; s/.*\///g" > $genome_list
+    # PERFORMANCE FIX: Use $TMPDIR for temp files to avoid contention on shared filesystem
+    # Use $$ (process ID) to ensure unique filename per job in parallel arrays
+    if [ -n "$TMPDIR" ] && [ -d "$TMPDIR" ]; then
+        genome_list="${TMPDIR}/carvewe-genomes-list-$$.txt"
+    elif [ -d "/tmp" ]; then
+        genome_list="/tmp/carvewe-genomes-list-$$.txt"
+    else
+        genome_list=$out_dir"/tmp-genomes-list-$$.txt"
+    fi
+
+    # Ensure cleanup on exit, error, or interrupt
+    trap "rm -f $genome_list" EXIT INT TERM
+
+    ls ${fasta_file}*.f[an]a | sed "s/\.f[an]a//g; s/.*\///g" > $genome_list
 
     while read genome
     do
@@ -277,15 +299,30 @@ fi
 #convert the output in order to run metabolite sensitivity tests as well
 printf "${YELLOW}Converting raw COBRApy output to correct input for sensitivity prediction:${NC}\n\n"
 
-python "${CARVEWE_SCRIPTS_DIR}/convert-media-output.py" --media-dir $media_dir --work-dir $out_dir
+# PERFORMANCE FIX: Pass --genome argument in single-genome mode to avoid directory scanning
+if [ "$fasta_dir" == "false" ]; then
+    # Single-genome mode: Pass genome name to process only that genome's files
+    python "${CARVEWE_SCRIPTS_DIR}/convert-media-output.py" --media-dir $media_dir --work-dir $out_dir --genome $genome
+else
+    # Batch/directory mode: Process all genomes (original behavior)
+    python "${CARVEWE_SCRIPTS_DIR}/convert-media-output.py" --media-dir $media_dir --work-dir $out_dir
+fi
 
 
 #Now we will pass our reformatted and combined media data to predict metabolite
 #sensitivities for all input genomes
 printf "${YELLOW}Extracting sensitivity values for our defined metabolite classes:${NC}\n\n"
 
-python "${CARVEWE_SCRIPTS_DIR}/get_met_depends.py" --media-dir $media_dir --work-dir $out_dir \
-    --ensemble-size $ensemble_size --data-dir "${CARVEWE_DATA_DIR}"
+# PERFORMANCE FIX: Pass --genome argument in single-genome mode to avoid directory scanning
+if [ "$fasta_dir" == "false" ]; then
+    # Single-genome mode: Pass genome name to process only that genome's files
+    python "${CARVEWE_SCRIPTS_DIR}/get_met_depends.py" --media-dir $media_dir --work-dir $out_dir \
+        --ensemble-size $ensemble_size --data-dir "${CARVEWE_DATA_DIR}" --genome $genome
+else
+    # Batch/directory mode: Process all genomes (original behavior)
+    python "${CARVEWE_SCRIPTS_DIR}/get_met_depends.py" --media-dir $media_dir --work-dir $out_dir \
+        --ensemble-size $ensemble_size --data-dir "${CARVEWE_DATA_DIR}"
+fi
 
 #Remove temporary file listing out the genomes
 if [ "$fasta_dir" == "true" ]

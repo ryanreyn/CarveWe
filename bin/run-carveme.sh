@@ -5,10 +5,11 @@ fna_type="false"
 faa_type="false"
 max_processes=1
 ensemble_size=2
+is_parallel="false"
 
 printf "Running CarveMe\n\n"
 
-while getopts "i:o:e:anp:" args; do
+while getopts "i:o:e:anp:P" args; do
     case "${args}" in
         i) fasta_dir=${OPTARG};;
         o) out_dir=${OPTARG};;
@@ -16,6 +17,7 @@ while getopts "i:o:e:anp:" args; do
         n) fna_type='true';;
         a) faa_type='true';;
         p) max_processes=$((OPTARG - 1));;
+        P) is_parallel='true';;
     esac
 done
 
@@ -39,7 +41,19 @@ fi
 
 
 #List out all of the fasta files to a temporary file to draw from to run CarveMe
-tmp_filelist=${out_dir}"/tmp-fasta-list.txt"
+# PERFORMANCE FIX: Use $TMPDIR for temp files to avoid contention on shared filesystem
+# Use $$ (process ID) to ensure unique filename per job in parallel arrays
+if [ -n "$TMPDIR" ] && [ -d "$TMPDIR" ]; then
+    tmp_filelist="${TMPDIR}/carvewe-fasta-list-$$.txt"
+elif [ -d "/tmp" ]; then
+    tmp_filelist="/tmp/carvewe-fasta-list-$$.txt"
+else
+    tmp_filelist=${out_dir}"/tmp-fasta-list-$$.txt"
+fi
+
+# Ensure cleanup on exit, error, or interrupt
+trap "rm -f $tmp_filelist" EXIT INT TERM
+
 ls ${fasta_dir}*.f[an]a > $tmp_filelist
 
 #Set up some counting variables for multiprocessing and progress display
@@ -47,15 +61,17 @@ current_processes=0
 curr_iter=1
 max_iter=`wc -l $tmp_filelist | cut -d ' ' -f 1`
 
-# Initialize the progress bar
-progress_percent=$(( (0 * 100) / max_iter ))
-bar_length=50
-completed_length=$(( progress_percent * bar_length / 100 ))
-remaining_length=$(( bar_length - completed_length ))
-completed_bar=$(printf "%${completed_length}s" | tr " " "#")
-remaining_bar=$(printf "%${remaining_length}s" | tr " " " ")
-printf "\rModel building in progress: [%s%s] %3d%%" "$completed_bar" "$remaining_bar" "$progress_percent"
-printf "\n"
+# Initialize the progress bar (only if not in parallel mode)
+if [ "$is_parallel" == "false" ]; then
+    progress_percent=$(( (0 * 100) / max_iter ))
+    bar_length=50
+    completed_length=$(( progress_percent * bar_length / 100 ))
+    remaining_length=$(( bar_length - completed_length ))
+    completed_bar=$(printf "%${completed_length}s" | tr " " "#")
+    remaining_bar=$(printf "%${remaining_length}s" | tr " " " ")
+    printf "\rModel building in progress: [%s%s] %3d%%" "$completed_bar" "$remaining_bar" "$progress_percent"
+    printf "\n"
+fi
 
 #Actual command loop to define fasta and xml files and execute CarveMe
 while read fasta_file
@@ -75,47 +91,52 @@ do
         (
         carve -v --dna -o "${xml_dir}/${xml_file}" -n $ensemble_size $fasta_file > /dev/null
 
-        #Adding a progress bar instead of letting standard output hit terminal
-        # Calculate progress percentage
-        progress_percent=$(( (curr_iter * 100) / max_iter ))
+        # Only show progress bar if not in parallel mode
+        if [ "$is_parallel" == "false" ]; then
+            # Calculate progress percentage
+            progress_percent=$(( (curr_iter * 100) / max_iter ))
 
-        # Build the progress bar
-        bar_length=50
-        completed_length=$(( progress_percent * bar_length / 100 ))
-        remaining_length=$(( bar_length - completed_length ))
-        completed_bar=$(printf "%${completed_length}s" | tr " " "#")
-        remaining_bar=$(printf "%${remaining_length}s" | tr " " " ")
+            # Build the progress bar
+            bar_length=50
+            completed_length=$(( progress_percent * bar_length / 100 ))
+            remaining_length=$(( bar_length - completed_length ))
+            completed_bar=$(printf "%${completed_length}s" | tr " " "#")
+            remaining_bar=$(printf "%${remaining_length}s" | tr " " " ")
 
-        # Print the progress bar
-        printf "\rModel building in progress: [%s%s] %3d%%" "$completed_bar" "$remaining_bar" "$progress_percent"
-        printf "\n"
-        # Increment the counter
-        curr_iter=$((curr_iter + 1))
+            # Print the progress bar
+            printf "\rModel building in progress: [%s%s] %3d%%" "$completed_bar" "$remaining_bar" "$progress_percent"
+            printf "\n"
+        fi
         ) &
         ((current_processes ++ ))
+        # Increment counter OUTSIDE subshell so it's visible to all iterations
+        curr_iter=$((curr_iter + 1))
     else
         (
         carve -v -o "${xml_dir}/${xml_file}" -n $ensemble_size $fasta_file \
         > /dev/null
-        #printf "\n"
 
-        #Adding a progress bar instead of letting standard output hit terminal
-        # Calculate progress percentage
-        completed_files=`ls $xml_dir | wc -l | cut -d ' ' -f 1`
-        progress_percent=$(( (completed_files * 100) / max_iter ))
+        # Only show progress bar if not in parallel mode
+        # PERFORMANCE FIX: Use iteration counter instead of expensive 'ls $xml_dir | wc -l'
+        if [ "$is_parallel" == "false" ]; then
+            # Calculate progress percentage
+            progress_percent=$(( (curr_iter * 100) / max_iter ))
 
-        # Build the progress bar
-        bar_length=50
-        completed_length=$(( progress_percent * bar_length / 100 ))
-        remaining_length=$(( bar_length - completed_length ))
-        completed_bar=$(printf "%${completed_length}s" | tr " " "#")
-        remaining_bar=$(printf "%${remaining_length}s" | tr " " " ")
+            # Build the progress bar
+            bar_length=50
+            completed_length=$(( progress_percent * bar_length / 100 ))
+            remaining_length=$(( bar_length - completed_length ))
+            completed_bar=$(printf "%${completed_length}s" | tr " " "#")
+            remaining_bar=$(printf "%${remaining_length}s" | tr " " " ")
 
-        # Print the progress bar
-        printf "\rModel building in progress: [%s%s] %3d%%" "$completed_bar" "$remaining_bar" "$progress_percent"
-        printf "\n"
+            # Print the progress bar
+            printf "\rModel building in progress: [%s%s] %3d%%" "$completed_bar" "$remaining_bar" "$progress_percent"
+            printf "\n"
+        fi
         ) &
         ((current_processes ++ ))
+        # Increment counter OUTSIDE subshell so it's visible to all iterations
+        curr_iter=$((curr_iter + 1))
     fi
 done < $tmp_filelist
 

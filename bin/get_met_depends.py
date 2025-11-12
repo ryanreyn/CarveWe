@@ -172,7 +172,7 @@ else:
         print(f"[BATCH MODE] Reading consolidated input files")
 
 #pull in the media data with headers
-data = pd.read_csv('%s/reformatted_media_data%s.csv' %(work_dir, file_suffix), index_col = 0)
+data = pd.read_csv('%s/reformatted_media_data%s.csv' %(media_dir, file_suffix), index_col = 0)
 #data = data.fillna(0)
 
 #pull in the classified metabolite data
@@ -180,7 +180,7 @@ met_class = pd.read_csv('%s/classified_metabolites.csv' %(data_dir), index_col=0
 
 #load in the metabolite names dictionary
 #pull in the data
-met_names_df = pd.read_csv('%s/all_max_flux_met_names%s.csv' %(work_dir, file_suffix), index_col = 0)
+met_names_df = pd.read_csv('%s/all_max_flux_met_names%s.csv' %(media_dir, file_suffix), index_col = 0)
 met_names = met_names_df.squeeze()
 
 #loop though the genomes
@@ -276,8 +276,8 @@ else:
         print(f"[BATCH MODE] Writing consolidated output files")
 
 cat_growth_info_df = pd.DataFrame.from_dict(growth_info)
-cat_growth_info_df.to_csv('%s/model_growth_rate_info_by_met_category_all_metabolites%s.csv' %(work_dir, output_suffix))
+cat_growth_info_df.to_csv('%s/model_growth_rate_info_by_met_category_all_metabolites%s.csv' %(media_dir, output_suffix))
 
 #output sensitivity info to a .csv as well
 sens_growth_info_df = pd.DataFrame.from_dict(sensitivity_info)
-sens_growth_info_df.to_csv('%s/model_sensitivity_by_met_category%s.csv' %(work_dir, output_suffix))
+sens_growth_info_df.to_csv('%s/model_sensitivity_by_met_category%s.csv' %(media_dir, output_suffix))

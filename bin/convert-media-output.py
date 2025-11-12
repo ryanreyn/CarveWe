@@ -155,15 +155,15 @@ else:
         print(f"[BATCH MODE] Writing consolidated output files")
 
 #store all max flux dataframes
-fluxes_df_filled.to_csv('%s/all_max_flux_diamond%s.csv' %(work_dir, file_suffix))
-headers.to_csv('%s/all_max_flux_headers_diamond%s.csv' %(work_dir, file_suffix))
+fluxes_df_filled.to_csv('%s/all_max_flux_diamond%s.csv' %(media_dir, file_suffix))
+headers.to_csv('%s/all_max_flux_headers_diamond%s.csv' %(media_dir, file_suffix))
 
 names = pd.DataFrame.from_dict(met_names, orient='index')
-names.to_csv('%s/all_max_flux_met_names%s.csv' %(work_dir, file_suffix))
+names.to_csv('%s/all_max_flux_met_names%s.csv' %(media_dir, file_suffix))
 
 # pull in values and headers
-max_flux = pd.read_csv('%s/all_max_flux_diamond%s.csv' %(work_dir, file_suffix), index_col = 0)
-headers = pd.read_csv('%s/all_max_flux_headers_diamond%s.csv' %(work_dir, file_suffix), index_col = 0)
+max_flux = pd.read_csv('%s/all_max_flux_diamond%s.csv' %(media_dir, file_suffix), index_col = 0)
+headers = pd.read_csv('%s/all_max_flux_headers_diamond%s.csv' %(media_dir, file_suffix), index_col = 0)
 
 #replace 0s with NaNs in the metabolite dataframe
 max_flux.replace(0, np.nan, inplace=True)
@@ -180,4 +180,4 @@ headers = headers.set_axis(columns, axis ='columns')
 data = pd.concat([headers, max_flux])
 data = data.T
 
-data.to_csv('%s/reformatted_media_data%s.csv' %(work_dir, file_suffix))
+data.to_csv('%s/reformatted_media_data%s.csv' %(media_dir, file_suffix))

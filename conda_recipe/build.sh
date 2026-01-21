@@ -25,6 +25,16 @@ fi
 mkdir -p "$PREFIX/etc/conda/activate.d"
 mkdir -p "$PREFIX/etc/conda/deactivate.d"
 
+# Add CarveWe environment setup
+cat > "$PREFIX/etc/conda/activate.d/carvewe_env.sh" << 'EOF'
+#!/usr/bin/env bash
+# Set up CarveWe environment variables
+export CARVEWE_INSTALL_DIR="$CONDA_PREFIX"
+export CARVEWE_SCRIPTS_DIR="$CONDA_PREFIX/libexec/carvewe"
+export CARVEWE_DATA_DIR="$CONDA_PREFIX/share/carvewe"
+EOF
+chmod 0755 "$PREFIX/etc/conda/activate.d/carvewe_env.sh"
+
 # Create activation script for CPLEX
 cat > "$PREFIX/etc/conda/activate.d/carvewe_cplex.sh" << 'EOF'
 #!/usr/bin/env bash

@@ -1,7 +1,7 @@
 # .github/workflows/build-linux.yml
 name: Build Linux
 
-on: [push, pull_request, workflow_dispatch]
+on: [workflow_dispatch]
 
 jobs:
   linux64:

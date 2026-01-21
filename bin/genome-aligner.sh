@@ -59,7 +59,7 @@ fasta_file=""
 is_dir="true"
 faa_type="false"
 fna_type="false"
-blastdb_dir="../ref_data"
+blastdb_dir="${CARVEWE_DATA_DIR}"
 
 while getopts "p:d:ano:t:b:" args; do
     case "${args}" in
@@ -144,7 +144,7 @@ genome_alignments=${out_dir}'/tmp-genome-alignments.tsv'
 `cut -f 1,2 ${outfile} | sed 's/-scaffold_[0-9]*$//g' > ${genome_alignments}`
 
 #Pull in cluster assignment file and align with processed BLAST output
-cluster_assignment="../final-cluster-assignments.tsv"
+cluster_assignment="${CARVEWE_DATA_DIR}/final-cluster-assignments.tsv"
 
 match_file=${out_dir}'/tmp-cluster-matches.txt'
 `grep -f ${genome_file} ${cluster_assignment} > ${match_file}`

@@ -21,8 +21,8 @@ done
 #Set up some initial variables
 files="hq-genome-ids.txt"
 tmp_dir=$out_dir"tmp/"
-fna_blastdb="../ref_data/carvewe-hq-genomes"
-faa_blastdb="../ref_data/carvewe-protein-seqs"
+fna_blastdb="${CARVEWE_DATA_DIR}/carvewe-hq-genomes"
+faa_blastdb="${CARVEWE_DATA_DIR}/carvewe-protein-seqs"
 
 if [[ -d ${tmp_dir} ]]
 then
@@ -33,7 +33,7 @@ else
     mkdir ${tmp_dir}
 fi
 
-`cp ../ref_data/${files} ${tmp_dir}`
+`cp ${CARVEWE_DATA_DIR}/${files} ${tmp_dir}`
 
 here=`pwd`
 cd ${tmp_dir}
@@ -70,14 +70,14 @@ do
     then
         (
         suffix=${genome}"/gene_call/"${genome}"-prokka.faa"
-        wget --no-check-certificate -a "../log.txt" ${prefix}${suffix}
+        wget --no-check-certificate -a "${out_dir}/log.txt" ${prefix}${suffix}
         ) &
         current_processes=$((current_processes + 1))
     elif [ "$fna_type" == true ]
     then
         (
         suffix=${genome}"/prokka/"${genome}"-Bacteria-prokka/"${genome}"-prokka-original.fna"
-        wget --no-check-certificate -a "../log.txt" ${prefix}${suffix}
+        wget --no-check-certificate -a "${out_dir}/log.txt" ${prefix}${suffix}
         ) &
         current_processes=$((current_processes + 1))
     fi

@@ -5,10 +5,41 @@ analysisUI <- function(id) {
     h3("Run SOM Analysis"),
     p("Configure parameters below and click Run to train the SOM."),
     
-    numericInput(
-      ns("gridsize"), 
-      "SOM grid size (square toroid with dimension X by X):", 
-      min = 5, max = 50, value = 20
+    radioButtons(
+      ns("cached_model"),
+      "Choose whether to use a cached SOM model (For large data it is recommended to save a SOM to use as a cached object)",
+      choices = c("Generate new SOM" = "generate",
+                  "Use cached SOM file" = "existing"),
+      selected = "generate"
+    ),
+    
+    conditionalPanel(
+      condition = sprintf("input[%s] == 'generate'", ns("cached_model")),
+      numericInput(
+        ns("gridsize"), 
+        "SOM grid size (square toroid with dimension X by X):", 
+        min = 5, max = 50, value = 20
+      ),
+      
+      numericInput(
+        ns("rlen"),
+        "Number of iterations to run the SOM for (default 100):",
+        min = 50, max = 3000, value = 100
+      )
+    ),
+    
+    conditionalPanel(
+      condition = sprintf("input[%s] == 'existing'", ns("cached_model")),
+      wellPanel(
+        h4("Required Data"),
+        fileInput(
+          ns("cached_som"),
+          "Cached SOM model",
+          accept = ".RData",
+          buttonLabel = "Browse...",
+          placeholder = "No file selected"
+        ),
+        helpText("Format: RData file containing a SOM object (output from train_som())")
     ),
     
     actionButton(
@@ -21,12 +52,14 @@ analysisUI <- function(id) {
     plotOutput(ns("eval_plot")),
     uiOutput(ns("clustering_info")),
     uiOutput(ns("choose_clusters")),
+    uiOutput(ns("choose_palette")),
     hr(),
     plotOutput(ns("grid_plot")),
     uiOutput(ns("results_summary")),
     hr(),
     tableOutput(ns("replicates")),
     tableOutput(ns("genome_clustering"))
+  )
   )
 }
 
@@ -53,16 +86,29 @@ analysisServer <- function(id, rv) {
         cat("  - Class:", class(rv$feature_data), "\n")
         cat("  - Dimensions:", dim(rv$feature_data), "\n")
         
-        cat("Step 3: Calling train_som()\n")
-        result <- train_som(rv$feature_data, grid_size = input$gridsize)
-        cat("Step 4: train_som() completed\n")
+        # Load the cached SOM model if that was specified
+        if (input$cached_model == "existing"){
+          cat("Skipping Steps 3-5 as we are loading a pre-solved SOM.\n")
+          user_som <- load(input$cached_som$datapath)
+          result <- get(user_som)
+        }
         
-        # Debug structure
-        cat("Step 5: Result structure:\n")
-        cat("  - Class:", class(result), "\n")
-        cat("  - Names:", paste(names(result), collapse = ", "), "\n")
-        if ("som_codes" %in% names(result)) {
-          cat("  - som_codes dimensions:", dim(result$som_codes), "\n")
+        # Otherwise train a fresh SOM with user-inputted parameters
+        if (input$cached_model == "generate"){
+          cat("Step 3: Calling train_som()\n")
+          result <- train_som(rv$feature_data, rlen = input$rlen, grid_size = input$gridsize)
+          cat("Step 4: train_som() completed\n")
+          
+          # Debug structure
+          cat("Step 5: Result structure:\n")
+          cat("  - Class:", class(result), "\n")
+          cat("  - Names:", paste(names(result), collapse = ", "), "\n")
+          if ("som_codes" %in% names(result)) {
+            cat("  - som_codes dimensions:", dim(result$som_codes), "\n")
+          }
+          if ("som_model" %in% names(result)) {
+            cat("  - som_model dimensions:", length(result$som_model$unit.classif), "\n")
+          }
         }
         
         return(result)
@@ -99,7 +145,7 @@ analysisServer <- function(id, rv) {
     # Output a plot
     output$eval_plot <- renderPlot({
       req(cluster_testing())
-      cat("Step X: Rendering plot of intra-cluster distances.\n")
+      cat("Step 6: Rendering plot of intra-cluster distances.\n")
       
       result <- plot_cluster_evaluation(cluster_testing())
       plot(result)
@@ -124,24 +170,70 @@ analysisServer <- function(id, rv) {
       }
     })
     
+    output$choose_palette <- renderUI({
+      req(input$clusters)
+      if (input$clusters){
+        fluidRow(
+          column(3,
+            sliderInput(ns("hue_range"), "Hue Range:", min = 0, max = 360, value = c(0, 360)),
+            sliderInput(ns("chroma_range"), "Chroma Range:", min = 0, max = 100, 
+                        value = c(30, 80)),
+            sliderInput(ns("lightness_range"), "Lightness Rnage:", min = 0, max = 100, 
+                        value = c(35, 80)),
+            actionButton(ns("generate_palette"), 
+                         "Generate Palette:",
+                         class = "btn-primary btn-lg",
+                         icon = icon("play"))
+          ),
+          column(8,
+            plotOutput(ns("color_palette_display"))
+          )
+        )
+      }
+    }
+    )
+    
+    observeEvent(input$generate_palette, {
+      # Create iwanthue color palette with designated number of clusters by user
+      rv$palette <- iwanthue(
+        n = input$clusters,
+        hmin = input$hue_range[1], hmax = input$hue_range[2],
+        cmin = input$chroma_range[1], cmax = input$chroma_range[2],
+        lmin = input$lightness_range[1], lmax = input$lightness_range[2]
+      )
+      
+      # Render the defined palette for display
+      output$color_palette_display <- renderPlot({
+        iwanthue(
+          n = input$clusters,
+          hmin = input$hue_range[1], hmax = input$hue_range[2],
+          cmin = input$chroma_range[1], cmax = input$chroma_range[2],
+          lmin = input$lightness_range[1], lmax = input$lightness_range[2],
+          plot = TRUE
+        )
+      })
+    })
+    
     # Cluster SOM nodes (fast - re-runs when k changes)
     cluster_result <- eventReactive(input$cluster,  # Trigger on either change
       {
         req(input$clusters)
         tryCatch({
-          cat("Step 6: Starting clustering\n")
+          cat("Step 7: Starting clustering\n")
           
           req(som_result())
           
           # Extract codes from the reactive VALUE
           codes <- som_result()$som_codes
-          cat("Step 7: Extracted codes\n")
+          cat("Step 8: Extracted codes\n")
           cat("  - Class:", class(codes), "\n")
           cat("  - Dimensions:", dim(codes), "\n")
           
-          cat("Step 8: Calling cluster_som_nodes() with k =", input$clusters, "\n")
-          result <- cluster_som_nodes(codes, k = input$clusters)
-          cat("Step 9: Clustering complete\n")
+          cat("Step 9: Calling cluster_som_nodes() with k =", input$clusters, "\n")
+          result <- cluster_som_nodes(
+            codes, 
+            k = as.numeric(input$clusters))
+          cat("Step 10: Clustering complete\n")
           cat("  - Result length:", length(result), "\n")
           
           return(result)
@@ -179,7 +271,7 @@ analysisServer <- function(id, rv) {
       rv$node_clusters <- cluster_result()
       rv$cluster_complete <- TRUE
       
-      cat("Step 10: Results stored in rv\n")
+      cat("Step 11: Results stored in rv\n")
       
       showNotification(
         "Analysis complete!", 
@@ -191,13 +283,15 @@ analysisServer <- function(id, rv) {
     # Render plot
     output$grid_plot <- renderPlot({
       req(rv$node_clusters)
-      cat("Step 11: Rendering plot\n")
+      cat("Step 12: Rendering plot\n")
       
       cat("  - som_result available:", !is.null(som_result()), "\n")
       cat("  - cluster_result available:", !is.null(cluster_result()), "\n")
       
       # Pass to plotting function (adjust based on what map plotting expects)
-      generate_som_map(node_clusters = rv$node_clusters, grid_size = input$gridsize)
+      generate_som_map(node_clusters = rv$node_clusters, 
+                       cluster_colors = rv$palette,
+                       grid_size = input$gridsize)
     })
     
     check_replicates <- eventReactive(cluster_result(), {

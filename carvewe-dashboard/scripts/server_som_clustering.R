@@ -15,14 +15,14 @@ custom_theme <- theme(plot.title=element_text(hjust=0.5),
                       legend.key = element_blank())
 
 
-cluster_colors <- c("#4e7b94","#547e48","#a6a541","#bed196","#243a56","#cd5b34","#60bb68","#5279ca")
-
-phylo_colors <- c("#b8617c","#63b750","#895bc9","#b2b53b","#c84ca3","#3d854f","#d74164","#54bf9f","#cf5230","#54acd8","#d48e36","#5f7ac7","#6e772c","#bf83c9","#bca262")
-
-legend_data <- data.frame(
-  label = factor(c("slow - intermediate", "intermediate", "intermediate - fast", "intermediate", "slow", "fast", "intermediate", "slow - intermediate"), levels = c("slow", "slow - intermediate", "intermediate", "intermediate - fast", "fast")),
-  color = c("lightblue","#00BA38","yellowgreen","#00BA38","#619CFF","#F8766D","#00BA38","lightblue")
-)
+# cluster_colors <- c("#4e7b94","#547e48","#a6a541","#bed196","#243a56","#cd5b34","#60bb68","#5279ca")
+# 
+# phylo_colors <- c("#b8617c","#63b750","#895bc9","#b2b53b","#c84ca3","#3d854f","#d74164","#54bf9f","#cf5230","#54acd8","#d48e36","#5f7ac7","#6e772c","#bf83c9","#bca262")
+# 
+# legend_data <- data.frame(
+#   label = factor(c("slow - intermediate", "intermediate", "intermediate - fast", "intermediate", "slow", "fast", "intermediate", "slow - intermediate"), levels = c("slow", "slow - intermediate", "intermediate", "intermediate - fast", "fast")),
+#   color = c("lightblue","#00BA38","yellowgreen","#00BA38","#619CFF","#F8766D","#00BA38","lightblue")
+# )
 # ============================================
 
 # ============================================
@@ -39,10 +39,16 @@ generate_feature_data <- function(input_data){
   pivot_data <- input_data%>%
     select(c(genome_id, model_id, nutrient_class, sensitivity_score))%>%
     pivot_wider(names_from = nutrient_class, values_from = sensitivity_score)
+  
+  #Remove Inorganic and Other classes
+  pivot_data <- pivot_data%>%
+    select(-any_of(c("Inorganic", "Other")))
+  
   feature_data <- pivot_data%>%
     select(-c(genome_id, model_id))%>%
     as.matrix()
   rownames(feature_data) <- pivot_data$genome_id
+  
     
   return(feature_data)
 }
@@ -117,14 +123,16 @@ cluster_mean_dist <- function(clusters, som_dist) {
       cluster_means <- append(cluster_means, 0)
     }
   }
-  
+
   return(mean(cluster_means))
 }
 
 
 #' Evaluate optimal number of clusters
 #' @export
-evaluate_cluster_range <- function(som_codes, k_range = 2:20) {
+evaluate_cluster_range <- function(som_codes,
+                                   k_range = 2:20,
+                                   seed = 123) {
   som_dist <- as.matrix(dist(som_codes))
   
   results <- data.frame(
@@ -134,6 +142,8 @@ evaluate_cluster_range <- function(som_codes, k_range = 2:20) {
   )
   
   for (k in k_range) {
+    set.seed(seed)
+    
     kmeans_clusters <- kmeans(
       som_codes, 
       centers = k, 
@@ -181,7 +191,7 @@ plot_cluster_evaluation <- function(eval_results) {
 #' Cluster SOM nodes
 #' @export
 cluster_som_nodes <- function(som_codes, 
-                              k = 8, 
+                              k = 8,
                               method = "kmeans",
                               seed = 123) {
   
@@ -213,7 +223,9 @@ cluster_som_nodes <- function(som_codes,
 #' @param node_clusters Provide the clustering of the SOM nodes to build the map
 #' @param grid_size Provide the length dimension of the square toroidal SOM grid
 #' @export
-generate_som_map <- function(node_clusters, grid_size = 20) {
+generate_som_map <- function(node_clusters, 
+                             cluster_colors,
+                             grid_size = 20) {
   nrow <- grid_size
   ncol <- grid_size
   r <- 0.5
@@ -498,6 +510,107 @@ assign_genomes_to_nodes_by_plurality <- function(feature_matrix,
   }
   
   return(genome_node_assignments)
+}
+
+#' Combine cluster surveying and genome assignment functions to cluster genomes
+#' with varying number of clusters.
+#' Useful for identifying how a subpopulation gets split out by the whole population
+#' @keywords internal
+multiple_cluster_assignments <- function(feature_matrix, 
+                                         input_som, 
+                                         k_range = 2:20, 
+                                         seed = 123) {
+  #Establish some som sub-variables independently
+  som_codes = input_som$som_codes
+  som_node_assignments = input_som$som_model$unit.classif
+  
+  #Set up a storage dataframe for the genomes and assignments for each input cluster number
+  out_df = data.frame(genome = rownames(feature_matrix))
+  
+  #Set up a storage dataframe for the node cluster assignments at each value of k
+  nodes_df = data.frame(nodes = c(1:dim(som_codes)[1]))
+  
+  # Loop over k_range and compute first the clustering with new k, then assign genomes by plurality
+  for (num_clust in k_range){
+    set.seed(seed)
+    curr_clustering <- cluster_som_nodes(som_codes, k = num_clust)
+    curr_assignments <- assign_genomes_by_plurality(feature_matrix, 
+                                                    som_node_assignments, 
+                                                    curr_clustering)
+    
+    #Store the new assignments in a new KXX column in the output dataframe via merge
+    column_name = paste0("K", num_clust)
+    assignments_only <- curr_assignments %>%
+      select(c(genome_id, majority_cluster))
+    out_df <- left_join(out_df, assignments_only, by = join_by(genome == genome_id))%>%
+      rename(!!column_name := majority_cluster)
+    
+    #Store the new nodes clustering in a new KXX column in the nodes dataframe
+    nodes_df <- nodes_df %>%
+      mutate(!!column_name := curr_clustering)
+  }
+  
+  #Build a comparison plot between these clusterings and original CarveWe clusters
+  #Load in CarveWe cluster assignments
+  carvewe_assignments <- read_csv(
+    file = "Publication_Data/final-cluster-assignments.csv")
+  
+  #Merge with multi-cluster output
+  combined_df <- left_join(out_df, carvewe_assignments, 
+                           by = join_by("genome" == "value"))
+  
+  #Filter for CarveWe genomes only and pivot longer
+  carvewe_compare <- combined_df%>%
+    filter(!is.na(clusters))%>%
+    select(-clusters)%>%
+    pivot_longer(-genome, 
+                 names_to = "num_clusters", 
+                 values_to = "cluster")%>%
+    group_by(genome)%>%
+    distinct(num_clusters, .keep_all = TRUE)
+  
+  #Remount the original cluster assignments onto dataframe
+  carvewe_compare <- left_join(carvewe_compare, carvewe_assignments, 
+                               by = join_by("genome" == "value"))
+  carvewe_compare <- carvewe_compare%>%rename(carvewe_cluster = clusters)
+  
+  #Compute percentage of genomes in each CarveWe cluster assigned to new clusters for each cluster number
+  summarize_cluster_percs <- carvewe_compare %>% 
+    group_by(carvewe_cluster, num_clusters, cluster)%>% 
+    reframe(count = n())%>%
+    group_by(carvewe_cluster,num_clusters)%>%
+    reframe(cluster = cluster, perc = count / sum(count))%>%
+    group_by(carvewe_cluster, num_clusters)%>%
+    filter(perc == max(perc, na.rm=TRUE))%>%
+    ungroup()
+  summarize_cluster_percs <- summarize_cluster_percs %>% 
+    mutate(num_clusters = as.numeric(str_sub(num_clusters, 2, str_length(num_clusters))))
+  
+  #Visualize the max percentage per original cluster at each new clustering level
+  multi.cluster.plot <- ggplot(summarize_cluster_percs)+ 
+    geom_line(aes(x=num_clusters, 
+                  y=perc, 
+                  color = as.factor(carvewe_cluster)), 
+              linewidth = 1.5,
+              linetype = "dashed")+
+    geom_point(aes(x = num_clusters, 
+                   y = perc, 
+                   color = as.factor(carvewe_cluster)), 
+               size = 5)+
+    theme_bw()+
+    custom_theme+
+    labs(x = "Number of clusters for full SOM", 
+         y = "Percentage of CarveWe cluster genomes", 
+         color = "Original CarveWe cluster")+
+    coord_cartesian(ylim = c(0,1))+
+    scale_color_manual(values = cluster_colors)
+  
+  #Return our output dataframes and corresponding plot
+  return(list(
+    nodes_df = nodes_df,
+    cluster_df = carvewe_compare, 
+    summary_df = summarize_cluster_percs, 
+    plot = multi.cluster.plot))
 }
 
 

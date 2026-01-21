@@ -52,7 +52,7 @@ metabolitesServer <- function(id, rv) {
     })
     
     scale_data <- eventReactive(input$run, {
-      cat("Step XX: Scaling the feature data")
+      cat("Step 13: Scaling the feature data")
       return_scaled <- prepare_scaled_data(
         rv$feature_data,
         rv$genome_assignments)

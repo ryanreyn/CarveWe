@@ -15,6 +15,7 @@ library(ggfortify)     # Fortify methods for ggplot
 library(gplots)        # Additional plotting (heatmap.2, etc.)
 library(ragg)          # Graphics device
 library(viridis)       # Specific color palettes
+library(hues)          # iwanthue color palettes for dynamic palette selection
 
 # === Phylogenetic/Tree ===
 library(ggtree)        # Tree visualization
@@ -37,16 +38,16 @@ library(png)           # PNG graphics
 # ============================================
 # Set a larger request size for Shiny
 # ============================================
-options(shiny.maxRequestSize = 100 * 1024^2)
+options(shiny.maxRequestSize = 10000 * 1024^2)
 options(verbose = TRUE)
 
 # Source all helpers/scripts
-source("carvewe-dashboard/scripts/server_som_clustering.R")
-source("carvewe-dashboard/scripts/server_metabolite_analysis.R")
+source("./scripts/server_som_clustering.R")
+source("./scripts/server_metabolite_analysis.R")
 
 # Source all modules
-source("carvewe-dashboard/R/module_upload.R")
-source("carvewe-dashboard/R/module_analysis.R")
+source("./R/module_upload.R")
+source("./R/module_analysis.R")
 # source("R/module_results.R")  # When you create it
 
 

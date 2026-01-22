@@ -16,17 +16,28 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Gate by allowed majors
+      - name: Gate by major version bumps only
         id: gate
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          # Strict SemVer vX.Y.Z (tweak if needed)
+
+          # Must be strict SemVer vX.Y.Z
           if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "Tag $TAG is not SemVer (vX.Y.Z). Skipping."
             echo "ok=false" >> $GITHUB_OUTPUT
             exit 0
           fi
+
+          # Only sync major version bumps (vX.0.0)
+          if [[ ! "$TAG" =~ ^v[0-9]+\.0\.0$ ]]; then
+            echo "Tag $TAG is not a major version bump (vX.0.0). Skipping."
+            echo "ok=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if major version is in allowed list
           if [[ "$TAG" =~ ^(${ALLOWED_MAJORS})\..* ]]; then
+            echo "Tag $TAG is a major version bump in allowed list. Syncing!"
             echo "ok=true" >> $GITHUB_OUTPUT
           else
             echo "Tag $TAG major not in (${ALLOWED_MAJORS}). Skipping."
@@ -37,53 +48,39 @@ jobs:
         if: steps.gate.outputs.ok != 'true'
         run: exit 0
 
-      - name: Check out the released tag
+      - name: Checkout with all tags
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.release.tag_name }}
+          persist-credentials: false
 
-      - name: Configure cosmetic author
+      - name: Configure git with PAT
         run: |
-          git config user.name "ryanreyn"
-        # Use a noreply if you like:
-        #  git config user.email "levinelab-sync@users.noreply.github.com"
+          git config user.name "Ryan Reynolds"
+          git config user.email "levinelab-sync@users.noreply.github.com"
+          git config --global url."https://x-access-token:${{ secrets.LAB_PUSH_TOKEN }}@github.com/".insteadOf "https://github.com/"
 
-      - name: Push release branch to lab repo
+      - name: Push branch and create PR
         env:
           TAG: ${{ github.event.release.tag_name }}
-          LAB_PUSH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
+          GH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
         run: |
-          set -euo pipefail
           BRANCH="upstream-${TAG}"
-          git remote add lab https://x-access-token:${LAB_PUSH_TOKEN}@github.com/${{ env.LAB_REPO }}.git
+
+          # Push the branch
           git checkout -B "$BRANCH" "$TAG"
-          git push lab "$BRANCH:$BRANCH" --force
+          git remote add lab https://github.com/${{ env.LAB_REPO }}.git
+          git push lab "$BRANCH" --force
 
-      - name: Open PR on lab repo (idempotent)
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-          LAB_PUSH_TOKEN: ${{ secrets.LAB_PUSH_TOKEN }}
-          LAB_REPO: ${{ env.LAB_REPO }}
-        run: |
-          set -euo pipefail
-          TITLE="Sync upstream ${TAG}"
-          BODY="Automated PR to sync upstream release ${TAG}."
-          HEAD="upstream-${TAG}"
-          BASE="main"
-
-          existing=$(curl -s -H "Authorization: token ${LAB_PUSH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${LAB_REPO}/pulls?state=open&head=${LAB_REPO%%/*}:${HEAD}")
-          if echo "$existing" | jq -e 'length > 0' >/dev/null; then
-            echo "PR already exists for ${HEAD} → ${BASE}. Skipping creation."
+          # Create PR if it doesn't exist
+          gh pr list --repo ${{ env.LAB_REPO }} --head "$BRANCH" --state open --json number -q '.[0].number' | grep -q . && {
+            echo "PR already exists for $BRANCH"
             exit 0
-          fi
+          }
 
-          payload=$(jq -n --arg title "$TITLE" --arg head "$HEAD" --arg base "$BASE" --arg body "$BODY" \
-                     '{title:$title, head:$head, base:$base, body:$body}')
-
-          curl -s -H "Authorization: token ${LAB_PUSH_TOKEN}" \
-               -H "Accept: application/vnd.github+json" \
-               -X POST "https://api.github.com/repos/${LAB_REPO}/pulls" \
-               -d "$payload" >/dev/null
+          gh pr create --repo ${{ env.LAB_REPO }} \
+            --head "$BRANCH" \
+            --base main \
+            --title "Sync upstream $TAG" \
+            --body "Automated PR to sync upstream release $TAG from ryanreyn/CarveWe"
